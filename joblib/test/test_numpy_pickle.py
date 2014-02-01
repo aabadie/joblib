@@ -245,17 +245,6 @@ def test_masked_array_persistence():
     nose.tools.assert_true(isinstance(b, np.ma.masked_array))
 
 
-def test_z_file():
-    # Test saving and loading data with Zfiles
-    filename = env['filename'] + str(random.randint(0, 1000))
-    data = numpy_pickle.asbytes('Foo, \n Bar, baz, \n\nfoobar')
-    with open(filename, 'wb') as f:
-        numpy_pickle.write_zfile(f, data)
-    with open(filename, 'rb') as f:
-        data_read = numpy_pickle.read_zfile(f)
-    nose.tools.assert_equal(data, data_read)
-
-
 @with_numpy
 def test_compressed_pickle_dump_and_load():
     # XXX: temporarily disable this test on non little-endian machines
