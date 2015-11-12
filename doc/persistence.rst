@@ -38,7 +38,7 @@ which we save into `savedir`::
 
   >>> import joblib
   >>> joblib.dump(to_persist, filename)  # doctest: +ELLIPSIS
-  ['...test.pkl', '...test.pkl_01.npy']
+  ['...test.pkl']
 
 We can then load the object from the file::
 

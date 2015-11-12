@@ -24,7 +24,7 @@ if PY3:
     Pickler = pickle._Pickler
     xrange = range
 
-    def asbytes(s):
+    def _asbytes(s):
         if isinstance(s, bytes):
             return s
         return s.encode('latin1')
@@ -32,7 +32,8 @@ if PY3:
 else:
     Unpickler = pickle.Unpickler
     Pickler = pickle.Pickler
-    asbytes = str
+    _asbytes = str
+
 
 def hex_str(an_int):
     """Converts an int to an hexadecimal string
@@ -44,9 +45,10 @@ _MEGA = 2 ** 20
 # Compressed pickle header format: _ZFILE_PREFIX followed by
 # bytes which contains the length of the zlib compressed data as an
 # hexadecimal string. For example: 'ZF0x139              '
-_ZFILE_PREFIX = asbytes('ZF')
+_ZFILE_PREFIX = _asbytes('ZF')
 _MAX_LEN = len(hex_str(2 ** 64))
 _CHUNK_SIZE = 64 * 1024
+
 
 def read_zfile(file_handle):
     """Read the z-file and return the content as a string
@@ -79,8 +81,10 @@ def read_zfile(file_handle):
         "The file could be corrupted." % file_handle)
     return data
 
+
 ###############################################################################
 # Utility objects for persistence.
+
 
 class NDArrayWrapper(object):
     """ An object to be persisted instead of numpy arrays.
@@ -117,9 +121,6 @@ class NDArrayWrapper(object):
             array = new_array
         return array
 
-    #def __reduce__(self):
-    #    return None
-
 
 class ZNDArrayWrapper(NDArrayWrapper):
     """An object to be persisted instead of numpy arrays.
@@ -152,6 +153,7 @@ class ZNDArrayWrapper(NDArrayWrapper):
         array.__setstate__(state)
         return array
 
+
 class ZipNumpyUnpickler(Unpickler):
     """A subclass of the Unpickler to unpickle our numpy pickles.
     """
@@ -181,6 +183,7 @@ class ZipNumpyUnpickler(Unpickler):
         """
         Unpickler.load_build(self)
         if isinstance(self.stack[-1], NDArrayWrapper):
+            print("####### ZIPUNPICKLER")
             if self.np is None:
                 raise ImportError("Trying to unpickle an ndarray, "
                                   "but numpy didn't import correctly")
@@ -193,6 +196,7 @@ class ZipNumpyUnpickler(Unpickler):
         dispatch[pickle.BUILD[0]] = load_build
     else:
         dispatch[pickle.BUILD] = load_build
+
 
 def load_compatibility(filename):
     """Reconstruct a Python object from a file persisted with joblib.dump.

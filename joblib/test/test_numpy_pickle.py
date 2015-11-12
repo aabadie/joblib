@@ -165,12 +165,12 @@ def test_numpy_persistence():
                                           compress=compress,
                                           cache_size=cache_size)
             # Check that one file was created per array
-            if not compress:
-                nose.tools.assert_equal(len(filenames), len(obj) + 1)
-            # Check that these files do exist
-            for file in filenames:
+            for fname in filenames:
+                if not compress:
+                    nose.tools.assert_equal(fname, this_filename)
+                # Check that these files do exist
                 nose.tools.assert_true(
-                    os.path.exists(os.path.join(env['dir'], file)))
+                        os.path.exists(os.path.join(env['dir'], fname)))
 
             # Unpickle the object
             obj_ = numpy_pickle.load(this_filename)
@@ -267,7 +267,7 @@ def test_compressed_pickle_dump_and_load():
     # or smaller than cache_size)
     for cache_size in [0, 1e9]:
         try:
-            dumped_filenames = numpy_pickle.dump(
+            dumped_file = numpy_pickle.dump(
                 expected_list, fname, compress=1,
                 cache_size=cache_size)
             result_list = numpy_pickle.load(fname)
@@ -278,8 +278,7 @@ def test_compressed_pickle_dump_and_load():
                 else:
                     nose.tools.assert_equal(result, expected)
         finally:
-            for fn in dumped_filenames:
-                os.remove(fn)
+            os.remove(fname)
 
 
 def _check_pickle(filename, expected_list):
@@ -367,7 +366,7 @@ if np is not None:
     class SubArray(np.ndarray):
 
         def __reduce__(self):
-            return (_load_sub_array, (np.asarray(self), ))
+            return _load_sub_array, (np.asarray(self), )
 
 
     def _load_sub_array(arr):

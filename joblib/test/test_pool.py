@@ -345,7 +345,7 @@ def test_memmaping_pool_for_large_arrays():
         # without per-child memory copies
         assert_true(os.path.isdir(p._temp_folder))
         dumped_filenames = os.listdir(p._temp_folder)
-        assert_equal(len(dumped_filenames), 2)
+        assert_equal(len(dumped_filenames), 1)
 
         # Check that memmory mapping is not triggered for arrays with
         # dtype='object'
@@ -406,13 +406,13 @@ def test_memmaping_on_dev_shm():
         p.map(id, [a] * 10)
         # a should have been memmaped to the pool temp folder: the joblib
         # pickling procedure generate a .pkl and a .npy file:
-        assert_equal(len(os.listdir(pool_temp_folder)), 2)
+        assert_equal(len(os.listdir(pool_temp_folder)), 1)
 
         b = np.ones(100, dtype=np.float64)
         assert_equal(b.nbytes, 800)
         p.map(id, [b] * 10)
         # A copy of both a and b are not stored in the shared memory folder
-        assert_equal(len(os.listdir(pool_temp_folder)), 4)
+        assert_equal(len(os.listdir(pool_temp_folder)), 2)
 
     finally:
         # Cleanup open file descriptors
