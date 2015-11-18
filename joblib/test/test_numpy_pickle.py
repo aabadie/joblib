@@ -1,7 +1,4 @@
-"""
-Test the numpy pickler as a replacement of the standard pickler.
-
-"""
+"""Test the numpy pickler as a replacement of the standard pickler."""
 
 from tempfile import mkdtemp
 import copy

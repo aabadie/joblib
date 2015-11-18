@@ -14,8 +14,8 @@ from ctypes import c_int64
 from contextlib import closing
 
 from .numpy_pickle_utils import PY3, _ZFILE_PREFIX, _MEGA
-from .numpy_pickle_utils import load_compatibility
-from .numpy_pickle_utils import Unpickler, Pickler, NDArrayWrapper
+from .numpy_pickle_utils import Unpickler, Pickler
+from .numpy_pickle_compat import load_compatibility, NDArrayWrapper
 from ._compat import _basestring
 
 try:
