@@ -1,6 +1,4 @@
-"""
-Utilities for fast persistence of big data, with optional compression.
-"""
+"""Utilities for fast persistence of big data, with optional compression."""
 
 # Author: Gael Varoquaux <gael dot varoquaux at normalesup dot org>
 # Copyright (c) 2009 Gael Varoquaux
@@ -36,8 +34,7 @@ else:
 
 
 def hex_str(an_int):
-    """Converts an int to an hexadecimal string
-    """
+    """Convert an int to an hexadecimal string."""
     return '{0:#x}'.format(an_int)
 
 _MEGA = 2 ** 20
@@ -51,7 +48,8 @@ _CHUNK_SIZE = 64 * 1024
 
 
 def read_zfile(file_handle):
-    """Read the z-file and return the content as a string
+    """Read the z-file and return the content as a string.
+
     Z-files are raw data compressed with zlib used internally by joblib
     for persistence. Backward compatibility is not guaranteed. Do not
     use for external purposes.
@@ -87,18 +85,20 @@ def read_zfile(file_handle):
 
 
 class NDArrayWrapper(object):
-    """ An object to be persisted instead of numpy arrays.
-        The only thing this object does, is to carry the filename in which
-        the array has been persisted, and the array subclass.
+    """An object to be persisted instead of numpy arrays.
+
+    The only thing this object does, is to carry the filename in which
+    the array has been persisted, and the array subclass.
     """
+
     def __init__(self, filename, subclass, allow_mmap=True):
-        "Store the useful information for later"
+        """Constructor. Store the useful information for later."""
         self.filename = filename
         self.subclass = subclass
         self.allow_mmap = allow_mmap
 
     def read(self, unpickler):
-        "Reconstruct the array"
+        """Reconstruct the array."""
         filename = os.path.join(unpickler._dirname, self.filename)
         # Load the array from the disk
         np_ver = [int(x) for x in unpickler.np.__version__.split('.', 2)[:2]]
@@ -111,9 +111,9 @@ class NDArrayWrapper(object):
         array = unpickler.np.load(filename, **memmap_kwargs)
         # Reconstruct subclasses. This does not work with old
         # versions of numpy
-        if (hasattr(array, '__array_prepare__')
-                and not self.subclass in (unpickler.np.ndarray,
-                                      unpickler.np.memmap)):
+        if (hasattr(array, '__array_prepare__') and
+            self.subclass not in (unpickler.np.ndarray,
+                                  unpickler.np.memmap)):
             # We need to reconstruct another subclass
             new_array = unpickler.np.core.multiarray._reconstruct(
                     self.subclass, (0,), 'b')
@@ -124,6 +124,7 @@ class NDArrayWrapper(object):
 
 class ZNDArrayWrapper(NDArrayWrapper):
     """An object to be persisted instead of numpy arrays.
+
     This object store the Zfile filename in which
     the data array has been persisted, and the meta information to
     retrieve it.
@@ -135,14 +136,15 @@ class ZNDArrayWrapper(NDArrayWrapper):
     creating large temporary buffers when unpickling data with
     large arrays.
     """
+
     def __init__(self, filename, init_args, state):
-        "Store the useful information for later"
+        """Constructor. Store the useful information for later."""
         self.filename = filename
         self.state = state
         self.init_args = init_args
 
     def read(self, unpickler):
-        "Reconstruct the array from the meta-information and the z-file"
+        """Reconstruct the array from the meta-information and the z-file."""
         # Here we a simply reproducing the unpickling mechanism for numpy
         # arrays
         filename = os.path.join(unpickler._dirname, self.filename)
@@ -155,11 +157,12 @@ class ZNDArrayWrapper(NDArrayWrapper):
 
 
 class ZipNumpyUnpickler(Unpickler):
-    """A subclass of the Unpickler to unpickle our numpy pickles.
-    """
+    """A subclass of the Unpickler to unpickle our numpy pickles."""
+
     dispatch = Unpickler.dispatch.copy()
 
     def __init__(self, filename, file_handle, mmap_mode=None):
+        """Constructor."""
         self._filename = os.path.basename(filename)
         self._dirname = os.path.dirname(filename)
         self.mmap_mode = mmap_mode
@@ -175,11 +178,11 @@ class ZipNumpyUnpickler(Unpickler):
         return BytesIO(read_zfile(file_handle))
 
     def load_build(self):
-        """ This method is called to set the state of a newly created
-            object.
-            We capture it to replace our place-holder objects,
-            NDArrayWrapper, by the array we are interested in. We
-            replace them directly in the stack of pickler.
+        """Set the state of a newly created object.
+
+        We capture it to replace our place-holder objects,
+        NDArrayWrapper, by the array we are interested in. We
+        replace them directly in the stack of pickler.
         """
         Unpickler.load_build(self)
         if isinstance(self.stack[-1], NDArrayWrapper):

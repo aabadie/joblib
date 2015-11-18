@@ -1,6 +1,4 @@
-"""
-Utilities for fast persistence of big data, with optional compression.
-"""
+"""Utilities for fast persistence of big data, with optional compression."""
 
 # Author: Gael Varoquaux <gael dot varoquaux at normalesup dot org>
 # Copyright (c) 2009 Gael Varoquaux
@@ -38,8 +36,15 @@ _GZIP_PREFIX = b'\x1f\x8b'
 # Cache file utilities
 
 def _read_magic(file_handle):
-    """ Utility to check the magic signature of a file identifying it as a
-        Zfile
+    """Utility to check the magic signature of a file.
+
+    _ZFILE_PREFIX is used to determine the number of bytes to read to determine
+    the magic number.
+
+    Parameters
+    ----------
+    file_handle: file_like
+
     """
     magic = file_handle.read(len(_ZFILE_PREFIX))
     # Pickling needs file-handles at the beginning of the file
@@ -48,8 +53,11 @@ def _read_magic(file_handle):
 
 
 def _check_filetype(filename, magic):
-    """ Utility function opening and returning a fileobject from a filename
-    given it's magic number (compressed using gzip or not compressed
+    """Utility function opening the right fileobject from a filename.
+
+    The magic number is used to choose between the type of file object to open:
+    * regular file object (default)
+    * gzip file object is magic matches _GZIP_PREFIX
 
     Parameters
     ----------
@@ -73,9 +81,12 @@ def _check_filetype(filename, magic):
 # instead of 2 bytes (H) allowing storage of large structured arrays
 
 def _check_version(version):
-    """
-    Utility that check if the version is supported. An exception is raised if
-    version is not supported.
+    """Utility that check if the version is supported.
+
+    An exception is raised if version is not supported.
+
+    Taken from numpy 1.10.
+
     Parameters
     ----------
     version: tuple
@@ -93,13 +104,27 @@ def _check_version(version):
 
 
 def _read_bytes(fp, size, error_template="ran out of data"):
-    """
-    Read from file-like object until size bytes are read.
+    """Read from file-like object until size bytes are read.
+
     Raises ValueError if not EOF is encountered before size bytes are read.
     Non-blocking objects only supported if they derive from io objects.
 
     Required as e.g. ZipExtFile in python 2.6 can return less data than
     requested.
+
+    Taken from numpy 1.10.
+
+    Parameters
+    ----------
+    fp: file-like object
+    size: int
+    error_template: str
+
+    Returns
+    -------
+    a bytes object
+        The data read in bytes.
+
     """
     data = bytes()
     while True:
@@ -121,16 +146,19 @@ def _read_bytes(fp, size, error_template="ran out of data"):
 
 
 def _read_numpy_magic(fp):
-    """ Read the magic string to get the version of the file format.
+    """Read the magic string to get the version of the file format.
+
+    Taken from numpy 1.10.
 
     Parameters
     ----------
-    fp : filelike object
+    fp : file_like
 
     Returns
     -------
     major : int
     minor : int
+
     """
     magic_str = _read_bytes(fp, MAGIC_LEN, "magic string")
     if magic_str[:-2] != MAGIC_PREFIX:
@@ -148,6 +176,8 @@ def _filter_header(s):
 
     Cleans up the 'L' in strings representing integers. Needed to allow npz
     headers produced in Python2 to be read in Python3.
+
+    Taken from numpy 1.10.
 
     Parameters
     ----------
@@ -182,8 +212,10 @@ def _filter_header(s):
 
 
 def _read_array_header(fp, version):
-    """
-    see read_array_header_1_0
+    """Read array header in file.
+
+    Taken from numpy 1.10.
+
     """
     # Read an unsigned, little-endian short int which has the length of the
     # header.
@@ -242,6 +274,8 @@ def open_memmap(filename, array_offset=0, mode='r+', dtype=None, shape=None,
     Open a .npy file as a memory-mapped array.
 
     This may be used to read an existing file or create a new one.
+
+    Taken from numpy 1.10
 
     Parameters
     ----------
@@ -314,14 +348,15 @@ def open_memmap(filename, array_offset=0, mode='r+', dtype=None, shape=None,
         mode = 'r+'
 
     marray = np.memmap(filename, dtype=dtype, shape=shape, order=order,
-        mode=mode, offset=offset)
+                       mode=mode, offset=offset)
 
     return marray
 
 
 def _read_array(fp):
-    """
-    Read an array from an NPY file.
+    """Read an array from an NPY file.
+
+    Taken from numpy 1.10.
 
     Parameters
     ----------
@@ -387,35 +422,39 @@ def _read_array(fp):
 
 
 class NPArrayWrapper(object):
-    """ An object to be persisted instead of numpy arrays.
+    """An object to be persisted instead of numpy arrays.
 
-        The only thing this object does, is to carry the filename in which
-        the array has been persisted, and the array subclass.
+    The only thing this object does, is to carry the filename in which
+    the array has been persisted, and the array subclass.
+
+    Attributes
+    ----------
+    subclass: numpy.ndarray subclass
+        Determine the subclass of the wrapped array.
+    allow_mmap: bool
+        Determine if memory mapping is allowed on the wrapped array.
+    offset: int
+        Contains the offset in file where the wrapped array can be read.
     """
 
     def __init__(self, subclass, allow_mmap=True, offset=c_int64(-1)):
-        """ Store the useful information for later
-        Parameters
-        ----------
-        subclass: numpy.ndarray subclass
-        allow_mmap: bool
-            Determine if memory mapping is allowed on the persisted array.
-        offset: int
-        """
-
+        """Constructor. Store the useful information for later."""
         self.subclass = subclass
         self.allow_mmap = allow_mmap
         self.offset = offset
 
     def read(self, unpickler):
-        """
+        """Read the array corresponging to this wrapper.
+
+        Use the unpickler to get all information to correctly read the array.
+
         Parameters
         ----------
         unpickler: NumpyUnpickler
 
         Returns
         -------
-        array: numpy.ndarray or numpy.memmap
+        array: numpy.ndarray or numpy.memmap or numpy.matrix
 
         """
         # The first pickled array should have an offset set
@@ -448,9 +487,9 @@ class NPArrayWrapper(object):
         unpickler.file_handle.seek(offset)
 
         # Manage array subclass case
-        if (hasattr(array, '__array_prepare__')
-                and self.subclass not in (unpickler.np.ndarray,
-                                          unpickler.np.memmap)):
+        if (hasattr(array, '__array_prepare__') and
+            self.subclass not in (unpickler.np.ndarray,
+                                  unpickler.np.memmap)):
             # We need to reconstruct another subclass
             new_array = unpickler.np.core.multiarray._reconstruct(
                                     self.subclass, (0,), 'b')
@@ -466,37 +505,32 @@ class NPArrayWrapper(object):
 class NumpyPickler(Pickler):
     """A pickler to persist of big data efficiently.
 
-        The main features of this object are:
+    The main features of this object are:
+    * persistence of numpy arrays in separate .npy files, for which
+    I/O is fast.
 
-         * persistence of numpy arrays in separate .npy files, for which
-           I/O is fast.
+    * optional compression using Zlib, with a special care on avoid
+    temporaries.
 
-         * optional compression using Zlib, with a special care on avoid
-           temporaries.
+    Attributes
+    ----------
+    fp: file
+        File object handle used for serializing the input object.
+    cache_size: int
+        The maximum object size until the default pickle is used.
+    protocol: int
+        Pickle protocol used. Default is pickle.DEFAULT_PROTOCOL under
+        python 3, pickle.HIGHEST_PROTOCOL otherwise.
+    offset: int
+        Position from where it is safe to write in the target file after
+        pickle serialization completes. This is the position where the
+        first numpy array starts to be written in the file.
     """
+
     dispatch = Pickler.dispatch.copy()
 
     def __init__(self, fp, cache_size=10, protocol=None, offset=c_int64(-1)):
-        """
-        Constructor
-        Parameters
-        ----------
-        fp: file
-            File object handle used for serializing the input object.
-        cache_size: int
-            The maximum object size until the default pickle is used.
-        protocol: int
-            Pickle protocol used. Default is pickle.DEFAULT_PROTOCOL under
-            python 3, pickle.HIGHEST_PROTOCOL otherwise.
-        offset: int
-            Position from where it is safe to write in the target file after
-            pickle serialization completes. This is the position where the first
-            numpy array starts to be written in the file.
-
-        Returns
-        -------
-
-        """
+        """Constructor. Store the useful information for later."""
         self.file = fp
         self.cache_size = cache_size
         self.compress = isinstance(self.file, gzip.GzipFile)
@@ -520,8 +554,8 @@ class NumpyPickler(Pickler):
         self.file_offset = offset
 
     def _create_array_wrapper(self, array):
-        """
-        Create and returns a numpy array wrapper from a numpy array
+        """Create and returns a numpy array wrapper from a numpy array.
+
         Parameters
         ----------
         array: numpy.ndarray
@@ -532,18 +566,20 @@ class NumpyPickler(Pickler):
             The numpy array wrapper.
         """
         allow_mmap = not array.dtype.hasobject and not self.compress
-        offset = c_int64(-1) if len(self.arrays) != 1 \
-                             else self.file_offset
+        offset = c_int64(-1) if len(self.arrays) != 1 else self.file_offset
         wrapper = NPArrayWrapper(type(array),
-                                   allow_mmap=allow_mmap,
-                                   offset=offset)
+                                 allow_mmap=allow_mmap,
+                                 offset=offset)
 
         return wrapper
 
     def save(self, obj):
-        """ Subclass the save method, to save ndarray subclasses in npy
-            files, rather than pickling them. Of course, this is a
-            total abuse of the Pickler class.
+        """Subclass the Pickler `save` method.
+
+        To save ndarray subclasses in npy
+        files, rather than pickling them. Of course, this is a
+        total abuse of the Pickler class.
+
         """
         if self.np is not None and type(obj) in (self.np.ndarray,
                                                  self.np.matrix,
@@ -569,10 +605,26 @@ class NumpyPickler(Pickler):
 
 class NumpyUnpickler(Unpickler):
     """A subclass of the Unpickler to unpickle our numpy pickles.
+
+    Attributes
+    ----------
+    mmap_mode: str
+        The memorymap mode to use for reading numpy arrays.
+    file_handle: file_like
+        File object to unpickle from.
+    filename: str
+        Name of the file to unpickle from. It should correspond to file_handle.
+    np: module
+        Contain pointer to imported numpy module (if available).
+    current_offset: c_int64
+        Offset in file of the next array to read.
+
     """
+
     dispatch = Unpickler.dispatch.copy()
 
     def __init__(self, filename, file_handle, mmap_mode=None):
+        """Constructor."""
         # The 2 next lines are for backward compatibility
         self._filename = os.path.basename(filename)
         self._dirname = os.path.dirname(filename)
@@ -589,30 +641,21 @@ class NumpyUnpickler(Unpickler):
         self.current_offset = c_int64(-1)
 
     def load_build(self):
-        """ This method is called to set the state of a newly created
-            object.
-            We capture it to replace our place-holder objects,
-            NDArrayWrapper, by the array we are interested in. We
-            replace them directly in the stack of pickler.
+        """Called to set the state of a newly created object.
+
+        We capture it to replace our place-holder objects,
+        NDArrayWrapper, by the array we are interested in. We
+        replace them directly in the stack of pickler.
         """
         Unpickler.load_build(self)
 
         # For back backward compatibility
-        if isinstance(self.stack[-1], NDArrayWrapper):
+        if isinstance(self.stack[-1], (NDArrayWrapper, NPArrayWrapper)):
             if self.np is None:
                 raise ImportError("Trying to unpickle an ndarray, "
                                   "but numpy didn't import correctly")
             nd_array_wrapper = self.stack.pop()
             array = nd_array_wrapper.read(self)
-            self.stack.append(array)
-
-        if isinstance(self.stack[-1], NPArrayWrapper):
-            if self.np is None:
-                raise ImportError("Trying to unpickle an ndarray, "
-                                  "but numpy didn't import correctly")
-            np_array_wrapper = self.stack.pop()
-            array = np_array_wrapper.read(self)
-            # push back the reconstructed on the unpickler stack
             self.stack.append(array)
 
     # Be careful to register our new method.
@@ -626,8 +669,10 @@ class NumpyUnpickler(Unpickler):
 # Utility functions
 
 def dump(value, filename, compress=0, cache_size=100, protocol=None):
-    """Fast persistence of an arbitrary Python object into one or multiple
-    files, with dedicated storage for numpy arrays.
+    """Persist an arbitrary Python object.
+
+    Fast persistence of an arbitrary Python object into one file with
+    dedicated storage for numpy arrays.
 
     Parameters
     -----------
@@ -664,6 +709,7 @@ def dump(value, filename, compress=0, cache_size=100, protocol=None):
     using compression can significantly slow down loading. In
     addition, compressed files take extra extra memory during
     dump and load.
+
     """
     if not isinstance(filename, _basestring):
         # People keep inverting arguments, and the resulting error is
@@ -740,7 +786,6 @@ def load(filename, mmap_mode=None):
     object might not match the original pickled object. Note that if the
     file was saved with compression, the arrays cannot be memmaped.
     """
-
     # Determine
     magic = b''
     with open(filename, 'rb') as file_handle:
