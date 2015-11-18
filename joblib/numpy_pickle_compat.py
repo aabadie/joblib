@@ -171,7 +171,6 @@ class ZipNumpyUnpickler(Unpickler):
         """
         Unpickler.load_build(self)
         if isinstance(self.stack[-1], NDArrayWrapper):
-            print("####### ZIPUNPICKLER")
             if self.np is None:
                 raise ImportError("Trying to unpickle an ndarray, "
                                   "but numpy didn't import correctly")

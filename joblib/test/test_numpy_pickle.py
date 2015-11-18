@@ -264,9 +264,9 @@ def test_compressed_pickle_dump_and_load():
     # or smaller than cache_size)
     for cache_size in [0, 1e9]:
         try:
-            dumped_file = numpy_pickle.dump(
-                expected_list, fname, compress=1,
-                cache_size=cache_size)
+            dumped_filenames = numpy_pickle.dump(expected_list,
+                                                 fname, compress=1,
+                                                 cache_size=cache_size)
             result_list = numpy_pickle.load(fname)
             for result, expected in zip(result_list, expected_list):
                 if isinstance(expected, np.ndarray):

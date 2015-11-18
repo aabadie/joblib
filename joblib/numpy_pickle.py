@@ -268,8 +268,8 @@ def _read_array_header(fp, version):
     return d['shape'], d['fortran_order'], dtype
 
 
-def open_memmap(filename, array_offset=0, mode='r+', dtype=None, shape=None,
-                fortran_order=False, version=None):
+def _open_memmap(filename, array_offset=0, mode='r+', dtype=None, shape=None,
+                 fortran_order=False, version=None):
     """
     Open a .npy file as a memory-mapped array.
 
@@ -421,7 +421,7 @@ def _read_array(fp):
 # Utility objects for persistence.
 
 
-class NPArrayWrapper(object):
+class NumpyArrayWrapper(object):
     """An object to be persisted instead of numpy arrays.
 
     The only thing this object does, is to carry the filename in which
@@ -473,9 +473,9 @@ class NPArrayWrapper(object):
         # Now we read the array stored at current offset
         # position in file handle
         if self.allow_mmap and unpickler.mmap_mode is not None:
-            array = open_memmap(unpickler.filename,
-                                unpickler.current_offset,
-                                mode=unpickler.mmap_mode)
+            array = _open_memmap(unpickler.filename,
+                                 unpickler.current_offset,
+                                 mode=unpickler.mmap_mode)
         else:
             array = _read_array(unpickler.file_handle)
 
@@ -562,14 +562,14 @@ class NumpyPickler(Pickler):
 
         Returns
         -------
-        wrapper: NPArrayWrapper:
+        wrapper: NumpyArrayWrapper:
             The numpy array wrapper.
         """
         allow_mmap = not array.dtype.hasobject and not self.compress
         offset = c_int64(-1) if len(self.arrays) != 1 else self.file_offset
-        wrapper = NPArrayWrapper(type(array),
-                                 allow_mmap=allow_mmap,
-                                 offset=offset)
+        wrapper = NumpyArrayWrapper(type(array),
+                                    allow_mmap=allow_mmap,
+                                    offset=offset)
 
         return wrapper
 
@@ -650,7 +650,7 @@ class NumpyUnpickler(Unpickler):
         Unpickler.load_build(self)
 
         # For back backward compatibility
-        if isinstance(self.stack[-1], (NDArrayWrapper, NPArrayWrapper)):
+        if isinstance(self.stack[-1], (NDArrayWrapper, NumpyArrayWrapper)):
             if self.np is None:
                 raise ImportError("Trying to unpickle an ndarray, "
                                   "but numpy didn't import correctly")
