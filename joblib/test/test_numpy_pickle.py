@@ -153,7 +153,7 @@ def test_numpy_persistence():
     filename = env['filename']
     rnd = np.random.RandomState(0)
     a = rnd.random_sample((10, 2))
-    for compress, cache_size in ((0, 0), (1, 0), (1, 10)):
+    for compress, cache_size in ((0, 0), (1, 0), (0, 10), (1, 10)):
         # We use 'a.T' to have a non C-contiguous array.
         for index, obj in enumerate(((a,), (a.T,), (a, a), [a, a, a])):
             # Change the file name to avoid side effects between tests
@@ -175,8 +175,7 @@ def test_numpy_persistence():
             for item in obj_:
                 nose.tools.assert_true(isinstance(item, np.ndarray))
             # And finally, check that all the values are equal.
-            nose.tools.assert_true(np.all(np.array(obj) ==
-                                                np.array(obj_)))
+            nose.tools.assert_true(np.all(np.array(obj) == np.array(obj_)))
 
         # Now test with array subclasses
         for obj in (
@@ -188,10 +187,21 @@ def test_numpy_persistence():
                                           compress=compress,
                                           cache_size=cache_size)
             obj_ = numpy_pickle.load(this_filename)
-            if (type(obj) is not np.memmap
-                        and hasattr(obj, '__array_prepare__')):
+            if (type(obj) is not np.memmap and
+                    hasattr(obj, '__array_prepare__')):
                 # We don't reconstruct memmaps
                 nose.tools.assert_true(isinstance(obj_, type(obj)))
+
+        # Test with an object containing multiple numpy arrays
+        obj = ComplexTestObject()
+        filenames = numpy_pickle.dump(obj, this_filename,
+                                      compress=compress,
+                                      cache_size=cache_size)
+        obj_ = numpy_pickle.load(this_filename)
+        nose.tools.assert_true(isinstance(obj_, type(obj)))
+        nose.tools.assert_true((obj_.array_float == obj.array_float).all())
+        nose.tools.assert_true((obj_.array_int == obj.array_int).all())
+        nose.tools.assert_true((obj_.array_obj == obj.array_obj).all())
 
     # Finally smoke test the warning in case of compress + mmap_mode
     this_filename = filename + str(random.randint(0, 1000))
@@ -208,6 +218,22 @@ def test_memmap_persistence():
     b = numpy_pickle.load(filename, mmap_mode='r')
 
     nose.tools.assert_true(isinstance(b, np.memmap))
+
+    # Test with an object containing multiple numpy arrays
+    filename = env['filename'] + str(random.randint(0, 1000))
+    obj = ComplexTestObject()
+    numpy_pickle.dump(obj, filename)
+    obj_ = numpy_pickle.load(filename, mmap_mode='r')
+    nose.tools.assert_true(isinstance(obj_, type(obj)))
+    nose.tools.assert_true(isinstance(obj_.array_float, np.memmap))
+    nose.tools.assert_true(isinstance(obj_.array_int, np.memmap))
+    nose.tools.assert_true(isinstance(obj_.array_obj, type(obj.array_obj)))
+    nose.tools.assert_true((np.asarray(obj_.array_float) ==
+                            obj.array_float).all())
+    nose.tools.assert_true((np.asarray(obj_.array_int) ==
+                            obj.array_int).all())
+    nose.tools.assert_true((np.asarray(obj_.array_obj) ==
+                            obj.array_obj).all())
 
 
 @with_numpy
@@ -279,7 +305,7 @@ def test_compressed_pickle_dump_and_load():
 
 
 def _check_pickle(filename, expected_list):
-    """Helper function to test joblib pickle content
+    """Helper function to test joblib pickle content.
 
     Note: currently only pickles containing an iterable are supported
     by this function.
@@ -365,11 +391,20 @@ if np is not None:
         def __reduce__(self):
             return _load_sub_array, (np.asarray(self), )
 
-
     def _load_sub_array(arr):
         d = SubArray(arr.shape)
         d[:] = arr
         return d
+
+    class ComplexTestObject:
+        """A complex object containing multiple np array memebers."""
+
+        def __init__(self):
+            """Initialize different types of arrays."""
+            self.array_float = np.arange(100, dtype='float64')
+            self.array_int = np.ones(100, dtype='int32')
+            self.array_obj = np.array(['a', 10, 20.0], dtype='object')
+
 
 @with_numpy
 def test_numpy_subclass():
