@@ -680,11 +680,12 @@ def dump(value, filename, compress=0, cache_size=100, protocol=None):
         The object to store to disk
     filename: string
         The name of the file in which it is to be stored
-    compress: integer for 0 to 9, optional
-        Optional compression level for the data. 0 is no compression.
+    compress: integer from 0 to 9 or boolean, optional
+        Optional compression level for the data. 0 or False is no compression.
         Higher means more compression, but also slower read and
         write times. Using a value of 3 is often a good compromise.
         See the notes for more details.
+        If compress is True, the compression level used is 3.
     cache_size: positive number, optional
         Fixes the order of magnitude (in megabytes) of the cache used
         for in-memory compression. Note that this is just an order of
@@ -711,6 +712,10 @@ def dump(value, filename, compress=0, cache_size=100, protocol=None):
     dump and load.
 
     """
+    if compress is True:
+        # By default, if compress is enabled, we want to be using 3 by default
+        compress = 3
+
     if not isinstance(filename, _basestring):
         # People keep inverting arguments, and the resulting error is
         # incomprehensible
@@ -724,9 +729,7 @@ def dump(value, filename, compress=0, cache_size=100, protocol=None):
             fp = gzip.GzipFile(filename, 'wb', compresslevel=compress)
         else:
             fp = open(filename, 'wb')
-        pickler = NumpyPickler(fp,
-                               cache_size=cache_size,
-                               protocol=protocol)
+        pickler = NumpyPickler(fp, cache_size=cache_size, protocol=protocol)
         pickler.dump(value)
         # Arrays were found in the pickled object, we replay the dump
         # in order to set the offset in the first pickled array wrapper
@@ -740,10 +743,8 @@ def dump(value, filename, compress=0, cache_size=100, protocol=None):
                 fp = gzip.GzipFile(filename, 'wb', compresslevel=compress)
             else:
                 fp = open(filename, 'wb')
-            pickler = NumpyPickler(fp,
-                                   cache_size=cache_size,
-                                   protocol=protocol,
-                                   offset=offset)
+            pickler = NumpyPickler(fp, cache_size=cache_size,
+                                   protocol=protocol, offset=offset)
             pickler.dump(value)
     finally:
         if 'pickler' in locals() and hasattr(pickler, 'file'):
