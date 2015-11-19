@@ -20,7 +20,7 @@ from ._compat import _basestring
 
 try:
     import numpy as np
-    from numpy.compat import isfileobj, asstr, asbytes
+    from numpy.compat import asstr, asbytes
 
     # Those globals depends on numpy import
     MAGIC_PREFIX = asbytes('\x93NUMPY')
@@ -352,71 +352,6 @@ def _open_memmap(filename, array_offset=0, mode='r+', dtype=None, shape=None,
 
     return marray
 
-
-def _read_array(fp):
-    """Read an array from an NPY file.
-
-    Taken from numpy 1.10.
-
-    Parameters
-    ----------
-    fp : file_like object
-        If this is not a real file object, then this may take extra memory
-        and time.
-
-    Returns
-    -------
-    array : ndarray
-        The array from the data on disk.
-
-    Raises
-    ------
-    ValueError
-        If the data is invalid.
-
-    """
-    version = _read_numpy_magic(fp)
-    _check_version(version)
-    shape, fortran_order, dtype = _read_array_header(fp, version)
-    if len(shape) == 0:
-        count = 1
-    else:
-        count = np.multiply.reduce(shape)
-
-    # Now read the actual data.
-    if dtype.hasobject:
-        # The array contained Python objects. We need to unpickle the data.
-        array = pickle.load(fp)
-    else:
-        if isfileobj(fp):
-            # We can use the fast fromfile() function.
-            array = np.fromfile(fp, dtype=dtype, count=count)
-        else:
-            # This is not a real file. We have to read it the
-            # memory-intensive way.
-            # crc32 module fails on reads greater than 2 ** 32 bytes,
-            # breaking large reads from gzip streams. Chunk reads to
-            # BUFFER_SIZE bytes to avoid issue and reduce memory overhead
-            # of the read. In non-chunked case count < max_read_count, so
-            # only one read is performed.
-
-            max_read_count = BUFFER_SIZE // min(BUFFER_SIZE, dtype.itemsize)
-
-            array = np.empty(count, dtype=dtype)
-            for i in range(0, count, max_read_count):
-                read_count = min(max_read_count, count - i)
-                read_size = int(read_count * dtype.itemsize)
-                data = _read_bytes(fp, read_size, "array data")
-                array[i:i+read_count] = np.frombuffer(data, dtype=dtype,
-                                                      count=read_count)
-
-        if fortran_order:
-            array.shape = shape[::-1]
-            array = array.transpose()
-        else:
-            array.shape = shape
-
-    return array
 ###############################################################################
 # Utility objects for persistence.
 
@@ -477,7 +412,7 @@ class NumpyArrayWrapper(object):
                                  unpickler.current_offset,
                                  mode=unpickler.mmap_mode)
         else:
-            array = _read_array(unpickler.file_handle)
+            array = unpickler.np.lib.format.read_array(unpickler.file_handle)
 
         # Next offset position is at the end of the array we just read and
         # before the next array if there's one
