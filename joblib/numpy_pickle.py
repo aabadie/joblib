@@ -350,7 +350,10 @@ def _open_memmap(filename, array_offset=0, mode='r+', dtype=None, shape=None,
     marray = np.memmap(filename, dtype=dtype, shape=shape, order=order,
                        mode=mode, offset=offset)
 
-    return marray
+    # update the offset so that it corresponds to the end of the read array
+    offset += marray.nbytes
+
+    return marray, offset
 
 ###############################################################################
 # Utility objects for persistence.
@@ -372,11 +375,12 @@ class NumpyArrayWrapper(object):
         Contains the offset in file where the wrapped array can be read.
     """
 
-    def __init__(self, subclass, allow_mmap=True, offset=c_int64(-1)):
+    def __init__(self, subclass, dtype, allow_mmap=True, offset=c_int64(-1)):
         """Constructor. Store the useful information for later."""
         self.subclass = subclass
         self.allow_mmap = allow_mmap
         self.offset = offset
+        self.dtype = dtype
 
     def read(self, unpickler):
         """Read the array corresponging to this wrapper.
@@ -399,27 +403,30 @@ class NumpyArrayWrapper(object):
         if unpickler.current_offset == -1:
             raise ValueError("Invalid numpy unpickling offset")
 
-        # Get the current position in the file
-        offset = unpickler.file_handle.tell()
+        # Get the current position of pickle in the file
+        pickle_offset = unpickler.file_handle.tell()
 
         # Move to the offset position => beginning of array to read
         unpickler.file_handle.seek(unpickler.current_offset)
 
         # Now we read the array stored at current offset
         # position in file handle
-        if self.allow_mmap and unpickler.mmap_mode is not None:
-            array = _open_memmap(unpickler.filename,
-                                 unpickler.current_offset,
-                                 mode=unpickler.mmap_mode)
+        if (self.allow_mmap and
+                unpickler.mmap_mode is not None and
+                not self.dtype.hasobject):
+            array, next_offset = _open_memmap(unpickler.filename,
+                                              unpickler.current_offset,
+                                              mode=unpickler.mmap_mode)
         else:
             array = unpickler.np.lib.format.read_array(unpickler.file_handle)
+            next_offset = unpickler.file_handle.tell()
 
         # Next offset position is at the end of the array we just read and
         # before the next array if there's one
-        unpickler.current_offset = unpickler.file_handle.tell()
+        unpickler.current_offset = next_offset
 
-        # Go back to unpickler position in file
-        unpickler.file_handle.seek(offset)
+        # Go back to pickle position in file
+        unpickler.file_handle.seek(pickle_offset)
 
         # Manage array subclass case
         if (hasattr(array, '__array_prepare__') and
@@ -503,6 +510,7 @@ class NumpyPickler(Pickler):
         allow_mmap = not array.dtype.hasobject and not self.compress
         offset = c_int64(-1) if len(self.arrays) != 1 else self.file_offset
         wrapper = NumpyArrayWrapper(type(array),
+                                    array.dtype,
                                     allow_mmap=allow_mmap,
                                     offset=offset)
 
