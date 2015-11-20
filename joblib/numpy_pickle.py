@@ -13,7 +13,8 @@ import io
 from ctypes import c_int64
 from contextlib import closing
 
-from .numpy_pickle_utils import PY3, _ZFILE_PREFIX, _MEGA
+from .numpy_pickle_utils import _MEGA, PY3
+from .numpy_pickle_utils import _ZFILE_PREFIX, _GZIP_PREFIX
 from .numpy_pickle_utils import Unpickler, Pickler
 from .numpy_pickle_compat import load_compatibility, NDArrayWrapper
 from ._compat import _basestring
@@ -28,8 +29,6 @@ try:
     BUFFER_SIZE = 2**18  # size of buffer for reading npz files in bytes
 except ImportError:
     np = None
-
-_GZIP_PREFIX = b'\x1f\x8b'
 
 
 ###############################################################################

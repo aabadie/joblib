@@ -41,3 +41,4 @@ _MEGA = 2 ** 20
 # bytes which contains the length of the zlib compressed data as an
 # hexadecimal string. For example: 'ZF0x139              '
 _ZFILE_PREFIX = _asbytes('ZF')
+_GZIP_PREFIX = b'\x1f\x8b'
