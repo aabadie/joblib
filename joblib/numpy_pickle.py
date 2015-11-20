@@ -10,7 +10,7 @@ import sys
 import gzip
 import warnings
 import io
-from ctypes import c_int64
+
 from contextlib import closing
 
 from .numpy_pickle_utils import _MEGA, PY3
@@ -375,11 +375,10 @@ class NumpyArrayWrapper(object):
         Contains the offset in file where the wrapped array can be read.
     """
 
-    def __init__(self, subclass, dtype, allow_mmap=True, offset=c_int64(-1)):
+    def __init__(self, subclass, dtype, allow_mmap=True):
         """Constructor. Store the useful information for later."""
         self.subclass = subclass
         self.allow_mmap = allow_mmap
-        self.offset = offset
         self.dtype = dtype
 
     def read(self, unpickler):
@@ -396,37 +395,17 @@ class NumpyArrayWrapper(object):
         array: numpy.ndarray or numpy.memmap or numpy.matrix
 
         """
-        # The first pickled array should have an offset set
-        if self.offset.value != -1:
-            unpickler.current_offset = self.offset.value
-
-        if unpickler.current_offset == -1:
-            raise ValueError("Invalid numpy unpickling offset")
-
-        # Get the current position of pickle in the file
-        pickle_offset = unpickler.file_handle.tell()
-
-        # Move to the offset position => beginning of array to read
-        unpickler.file_handle.seek(unpickler.current_offset)
-
         # Now we read the array stored at current offset
         # position in file handle
         if (self.allow_mmap and
                 unpickler.mmap_mode is not None and
                 not self.dtype.hasobject):
             array, next_offset = _open_memmap(unpickler.filename,
-                                              unpickler.current_offset,
+                                              unpickler.file_handle.tell(),
                                               mode=unpickler.mmap_mode)
+            unpickler.file_handle.seek(next_offset)
         else:
             array = unpickler.np.lib.format.read_array(unpickler.file_handle)
-            next_offset = unpickler.file_handle.tell()
-
-        # Next offset position is at the end of the array we just read and
-        # before the next array if there's one
-        unpickler.current_offset = next_offset
-
-        # Go back to pickle position in file
-        unpickler.file_handle.seek(pickle_offset)
 
         # Manage array subclass case
         if (hasattr(array, '__array_prepare__') and
@@ -471,14 +450,11 @@ class NumpyPickler(Pickler):
 
     dispatch = Pickler.dispatch.copy()
 
-    def __init__(self, fp, cache_size=10, protocol=None, offset=c_int64(-1)):
+    def __init__(self, fp, cache_size=10, protocol=None):
         """Constructor. Store the useful information for later."""
         self.file = fp
         self.cache_size = cache_size
         self.compress = isinstance(self.file, gzip.GzipFile)
-
-        # store temporarily the arrays
-        self.arrays = []
 
         # By default we want a pickle protocol that only changes with
         # the major python version and not the minor one
@@ -493,7 +469,6 @@ class NumpyPickler(Pickler):
         except ImportError:
             np = None
         self.np = np
-        self.file_offset = offset
 
     def _create_array_wrapper(self, array):
         """Create and returns a numpy array wrapper from a numpy array.
@@ -508,11 +483,9 @@ class NumpyPickler(Pickler):
             The numpy array wrapper.
         """
         allow_mmap = not array.dtype.hasobject and not self.compress
-        offset = c_int64(-1) if len(self.arrays) != 1 else self.file_offset
         wrapper = NumpyArrayWrapper(type(array),
                                     array.dtype,
-                                    allow_mmap=allow_mmap,
-                                    offset=offset)
+                                    allow_mmap=allow_mmap)
 
         return wrapper
 
@@ -536,12 +509,12 @@ class NumpyPickler(Pickler):
                     obj = self.np.asarray(obj)
                 return Pickler.save(self, obj)
 
-            # We store a ref to arrays during the dump, those arrays
-            # will be written at the end of the pickled file
-            self.arrays.append(obj)
-
             # This converts on the fly the array in a wrapper
-            obj = self._create_array_wrapper(obj)
+            Pickler.save(self, self._create_array_wrapper(obj))
+
+            # Array is stored right after the wrapper
+            self.np.save(self.file, obj)
+            return
 
         return Pickler.save(self, obj)
 
@@ -559,8 +532,6 @@ class NumpyUnpickler(Unpickler):
         Name of the file to unpickle from. It should correspond to file_handle.
     np: module
         Contain pointer to imported numpy module (if available).
-    current_offset: c_int64
-        Offset in file of the next array to read.
 
     """
 
@@ -581,7 +552,6 @@ class NumpyUnpickler(Unpickler):
         except ImportError:
             np = None
         self.np = np
-        self.current_offset = c_int64(-1)
 
     def load_build(self):
         """Called to set the state of a newly created object.
@@ -674,27 +644,9 @@ def dump(value, filename, compress=0, cache_size=100, protocol=None):
             fp = open(filename, 'wb')
         pickler = NumpyPickler(fp, cache_size=cache_size, protocol=protocol)
         pickler.dump(value)
-        # Arrays were found in the pickled object, we replay the dump
-        # in order to set the offset in the first pickled array wrapper
-        if len(pickler.arrays) > 0:
-            fp.flush()
-            offset = c_int64(fp.tell())
-            fp.close()
-            # Now that we now the offset needed to write after the pickle
-            # we process another pickle
-            if compress > 0:
-                fp = gzip_file_factory(filename, 'wb', compresslevel=compress)
-            else:
-                fp = open(filename, 'wb')
-            pickler = NumpyPickler(fp, cache_size=cache_size,
-                                   protocol=protocol, offset=offset)
-            pickler.dump(value)
     finally:
         if 'pickler' in locals() and hasattr(pickler, 'file'):
             fp.flush()
-            for array in pickler.arrays:
-                pickler.np.save(fp, array)
-
             fp.close()
     return [filename]
 
