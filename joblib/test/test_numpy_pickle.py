@@ -197,11 +197,11 @@ def test_numpy_persistence():
         filenames = numpy_pickle.dump(obj, this_filename,
                                       compress=compress,
                                       cache_size=cache_size)
-        obj_ = numpy_pickle.load(this_filename)
-        nose.tools.assert_true(isinstance(obj_, type(obj)))
-        nose.tools.assert_true((obj_.array_float == obj.array_float).all())
-        nose.tools.assert_true((obj_.array_int == obj.array_int).all())
-        nose.tools.assert_true((obj_.array_obj == obj.array_obj).all())
+        obj_loaded = numpy_pickle.load(this_filename)
+        nose.tools.assert_true(isinstance(obj_loaded, type(obj)))
+        np.testing.assert_array_equal(obj_loaded.array_float, obj.array_float)
+        np.testing.assert_array_equal(obj_loaded.array_int, obj.array_int)
+        np.testing.assert_array_equal(obj_loaded.array_obj, obj.array_obj)
 
     # Finally smoke test the warning in case of compress + mmap_mode
     this_filename = filename + str(random.randint(0, 1000))
@@ -223,17 +223,19 @@ def test_memmap_persistence():
     filename = env['filename'] + str(random.randint(0, 1000))
     obj = ComplexTestObject()
     numpy_pickle.dump(obj, filename)
-    obj_ = numpy_pickle.load(filename, mmap_mode='r')
-    nose.tools.assert_true(isinstance(obj_, type(obj)))
-    nose.tools.assert_true(isinstance(obj_.array_float, np.memmap))
-    nose.tools.assert_true(isinstance(obj_.array_int, np.memmap))
-    nose.tools.assert_true(isinstance(obj_.array_obj, type(obj.array_obj)))
-    nose.tools.assert_true((np.asarray(obj_.array_float) ==
-                            obj.array_float).all())
-    nose.tools.assert_true((np.asarray(obj_.array_int) ==
-                            obj.array_int).all())
-    nose.tools.assert_true((np.asarray(obj_.array_obj) ==
-                            obj.array_obj).all())
+    obj_loaded = numpy_pickle.load(filename, mmap_mode='r')
+    nose.tools.assert_true(isinstance(obj_loaded, type(obj)))
+    nose.tools.assert_true(isinstance(obj_loaded.array_float, np.memmap))
+    nose.tools.assert_true(isinstance(obj_loaded.array_int, np.memmap))
+    # Memory map not allowed for numpy object arrays
+    nose.tools.assert_true(isinstance(obj_loaded.array_obj,
+                                      type(obj.array_obj)))
+    np.testing.assert_array_equal(obj_loaded.array_float,
+                                  obj.array_float)
+    np.testing.assert_array_equal(obj_loaded.array_int,
+                                  obj.array_int)
+    np.testing.assert_array_equal(obj_loaded.array_obj,
+                                  obj.array_obj)
 
 
 @with_numpy
