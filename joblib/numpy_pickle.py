@@ -16,6 +16,7 @@ from contextlib import closing
 from .numpy_pickle_utils import _MEGA, PY3
 from .numpy_pickle_utils import _ZFILE_PREFIX, _GZIP_PREFIX
 from .numpy_pickle_utils import Unpickler, Pickler
+from .numpy_pickle_utils import gzip_file_factory
 from .numpy_pickle_compat import load_compatibility, NDArrayWrapper
 from ._compat import _basestring
 
@@ -71,7 +72,7 @@ def _check_filetype(filename, magic):
 
     """
     if magic == _GZIP_PREFIX:
-        return gzip.GzipFile(filename, 'rb')
+        return gzip_file_factory(filename)
 
     return open(filename, 'rb')
 
@@ -668,7 +669,7 @@ def dump(value, filename, compress=0, cache_size=100, protocol=None):
 
     try:
         if compress > 0:
-            fp = gzip.GzipFile(filename, 'wb', compresslevel=compress)
+            fp = gzip_file_factory(filename, 'wb', compresslevel=compress)
         else:
             fp = open(filename, 'wb')
         pickler = NumpyPickler(fp, cache_size=cache_size, protocol=protocol)
@@ -682,7 +683,7 @@ def dump(value, filename, compress=0, cache_size=100, protocol=None):
             # Now that we now the offset needed to write after the pickle
             # we process another pickle
             if compress > 0:
-                fp = gzip.GzipFile(filename, 'wb', compresslevel=compress)
+                fp = gzip_file_factory(filename, 'wb', compresslevel=compress)
             else:
                 fp = open(filename, 'wb')
             pickler = NumpyPickler(fp, cache_size=cache_size,
