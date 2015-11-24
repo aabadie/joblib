@@ -226,7 +226,9 @@ def test_memmap_persistence():
     obj_loaded = numpy_pickle.load(filename, mmap_mode='r')
     nose.tools.assert_true(isinstance(obj_loaded, type(obj)))
     nose.tools.assert_true(isinstance(obj_loaded.array_float, np.memmap))
+    nose.tools.assert_false(obj_loaded.array_float.flags.writeable)
     nose.tools.assert_true(isinstance(obj_loaded.array_int, np.memmap))
+    nose.tools.assert_false(obj_loaded.array_int.flags.writeable)
     # Memory map not allowed for numpy object arrays
     nose.tools.assert_true(isinstance(obj_loaded.array_obj,
                                       type(obj.array_obj)))
@@ -236,6 +238,19 @@ def test_memmap_persistence():
                                   obj.array_int)
     np.testing.assert_array_equal(obj_loaded.array_obj,
                                   obj.array_obj)
+
+    # Test we can write in memmaped arrays
+    obj_loaded = numpy_pickle.load(filename, mmap_mode='r+')
+    nose.tools.assert_true(obj_loaded.array_float.flags.writeable)
+    obj_loaded.array_float[0:10] = 10.0
+    nose.tools.assert_true(obj_loaded.array_int.flags.writeable)
+    obj_loaded.array_int[0:10] = 10
+
+    obj_reloaded = numpy_pickle.load(filename, mmap_mode='r')
+    np.testing.assert_array_equal(obj_reloaded.array_float,
+                                  obj_loaded.array_float)
+    np.testing.assert_array_equal(obj_reloaded.array_int,
+                                  obj_loaded.array_int)
 
 
 @with_numpy

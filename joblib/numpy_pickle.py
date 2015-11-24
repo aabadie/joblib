@@ -323,7 +323,7 @@ def _open_memmap(filename, array_offset=0, mode='r+', dtype=None, shape=None,
     """
     # Read the header of the array first.
     try:
-        fp = open(filename, mode+'b')
+        fp = open(filename, 'rb')
         fp.seek(array_offset)
         version = _read_numpy_magic(fp)
         _check_version(version)
