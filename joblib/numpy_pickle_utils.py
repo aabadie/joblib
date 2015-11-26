@@ -61,8 +61,7 @@ def gzip_file_factory(f, mode='rb', compresslevel=0):
 
         def _add_read_data(self, data):
             self.crc = 0xffffffff
-            if not PY26:
-                offset = self.offset - self.extrastart
+            offset = self.offset if PY26 else self.offset - self.extrastart
             self.extrabuf = self.extrabuf[offset:] + data
             self.extrasize = self.extrasize + len(data)
             self.extrastart = self.offset
