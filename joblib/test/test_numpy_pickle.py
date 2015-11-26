@@ -252,6 +252,13 @@ def test_memmap_persistence():
     np.testing.assert_array_equal(obj_reloaded.array_int,
                                   obj_loaded.array_int)
 
+    # Test w+ mode is catched and the mode has switched to r+
+    obj_mode_w = numpy_pickle.load(filename, mmap_mode='w+')
+    nose.tools.assert_true(obj_loaded.array_int.flags.writeable)
+    nose.tools.assert_equal(obj_loaded.array_int.mode, 'r+')
+    nose.tools.assert_true(obj_loaded.array_float.flags.writeable)
+    nose.tools.assert_equal(obj_loaded.array_float.mode, 'r+')
+
 
 @with_numpy
 def test_memmap_persistence_mixed_dtypes():
@@ -271,6 +278,26 @@ def test_memmap_persistence_mixed_dtypes():
     # the object-dtype array has been loaded in memory
     nose.tools.assert_false(isinstance(b_clone, np.memmap))
 
+
+@with_numpy
+def test_memmap_persistence_numpy_function():
+    rnd = np.random.RandomState(0)
+    a = rnd.random_sample(10)
+    filename = env['filename'] + str(random.randint(0, 1000))
+    with open(filename, 'wb') as f:
+        np.save(f, a)
+    array, offset = numpy_pickle._open_memmap(filename,
+                                              dtype=a.dtype, shape=a.shape)
+    nose.tools.assert_true(isinstance(array, np.memmap))
+    np.testing.assert_array_equal(array, a)
+
+    # Arrays with object dtype cannot be memmaped
+    b = np.array([1, 'b'], dtype=object)
+    filename = env['filename'] + str(random.randint(0, 1000))
+    with open(filename, 'wb') as f:
+        np.save(f, b)
+    nose.tools.assert_raises(ValueError, numpy_pickle._open_memmap,
+                             filename, dtype=b.dtype, shape=b.shape)
 
 @with_numpy
 def test_masked_array_persistence():
