@@ -128,6 +128,94 @@ def _check_filetype(filename, magic):
     return open(filename, 'rb')
 
 
+def _open_memmap(filename, array_offset=0, mode='r+', dtype=None, shape=None,
+                 fortran_order=False, version=None):
+    """
+    Open a .npy file as a memory-mapped array.
+
+    This may be used to read an existing file or create a new one.
+
+    Taken from numpy 1.10
+
+    Parameters
+    ----------
+    filename : str
+        The name of the file on disk.  This may *not* be a file-like
+        object.
+    array_offset : int
+        The offset in the file object where the array is serialized
+    mode : str, optional
+        The mode in which to open the file; the default is 'r+'.  In
+        addition to the standard file modes, 'c' is also accepted to mean
+        "copy on write."  See `memmap` for the available mode strings.
+    dtype : data-type, optional
+        The data type of the array if we are creating a new file in "write"
+        mode, if not, `dtype` is ignored.  The default value is None, which
+        results in a data-type of `float64`.
+    shape : tuple of int
+        The shape of the array if we are creating a new file in "write"
+        mode, in which case this parameter is required.  Otherwise, this
+        parameter is ignored and is thus optional.
+    fortran_order : bool, optional
+        Whether the array should be Fortran-contiguous (True) or
+        C-contiguous (False, the default) if we are creating a new file in
+        "write" mode.
+    version : tuple of int (major, minor) or None
+        If the mode is a "write" mode, then this is the version of the file
+        format used to create the file.  None means use the oldest
+        supported version that is able to store the data.  Default: None
+
+    Returns
+    -------
+    marray : memmap
+        The memory-mapped array.
+
+    Raises
+    ------
+    ValueError
+        If the data or the mode is invalid.
+    IOError
+        If the file is not found or cannot be opened correctly.
+
+    See Also
+    --------
+    memmap
+
+    """
+    # Read the header of the array first.
+    try:
+        fp = open(filename, 'rb')
+        fp.seek(array_offset)
+        version = _read_numpy_magic(fp)
+        _check_version(version)
+
+        shape, fortran_order, dtype = _read_array_header(fp, version)
+        if dtype.hasobject:
+            msg = "Array can't be memory-mapped: Python objects in dtype."
+            raise ValueError(msg)
+        offset = fp.tell()
+    finally:
+        fp.close()
+
+    if fortran_order:
+        order = 'F'
+    else:
+        order = 'C'
+
+    # We need to change a write-only mode to a read-write mode since we've
+    # already written data to the file.
+    if mode == 'w+':
+        mode = 'r+'
+
+    marray = np.memmap(filename, dtype=dtype, shape=shape, order=order,
+                       mode=mode, offset=offset)
+
+    # update the offset so that it corresponds to the end of the read array
+    offset += marray.nbytes
+
+    return marray, offset
+
+
 # The following functions are imported from nympy 1.10 to support numpy
 # versions previous to 1.9
 
