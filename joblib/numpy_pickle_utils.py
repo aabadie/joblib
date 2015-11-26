@@ -14,6 +14,7 @@ from ._compat import _basestring
 
 
 PY3 = sys.version_info[0] >= 3
+PY26 = sys.version_info[0] == 2 and sys.version_info[1] == 6
 
 if PY3:
     Unpickler = pickle._Unpickler
@@ -51,34 +52,6 @@ def gzip_file_factory(f, mode='rb', compresslevel=0):
 
     class GzipFile(gzip.GzipFile):
 
-        def _init_write(self, filename):
-            self.name = filename
-            self.crc = 0xffffffff
-            self.size = 0
-            self.writebuf = []
-            self.bufsize = 0
-
-        def write(self,data):
-            self._check_closed()
-            if self.mode != WRITE:
-                import errno
-                raise OSError(errno.EBADF, "write() on read-only GzipFile object")
-
-            if self.fileobj is None:
-                raise ValueError("write() on closed GzipFile object")
-
-            # Convert data type if called by io.BufferedWriter.
-            if isinstance(data, memoryview):
-                data = data.tobytes()
-
-            if len(data) > 0:
-                self.size = self.size + len(data)
-                self.crc = 0xffffffff
-                self.fileobj.write(self.compress.compress(data))
-                self.offset += len(data)
-
-            return len(data)
-
         def _read_eof(self):
             pass
 
@@ -88,7 +61,8 @@ def gzip_file_factory(f, mode='rb', compresslevel=0):
 
         def _add_read_data(self, data):
             self.crc = 0xffffffff
-            offset = self.offset - self.extrastart
+            if not PY26:
+                offset = self.offset - self.extrastart
             self.extrabuf = self.extrabuf[offset:] + data
             self.extrasize = self.extrasize + len(data)
             self.extrastart = self.offset
