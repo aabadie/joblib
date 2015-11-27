@@ -128,10 +128,9 @@ class NumpyPickler(Pickler):
 
     dispatch = Pickler.dispatch.copy()
 
-    def __init__(self, fp, cache_size=10, protocol=None):
+    def __init__(self, fp, protocol=None):
         """Constructor. Store the useful information for later."""
         self.file = fp
-        self.cache_size = cache_size
         self.compress = isinstance(self.file, gzip.GzipFile)
 
         # By default we want a pickle protocol that only changes with
@@ -178,8 +177,7 @@ class NumpyPickler(Pickler):
         if self.np is not None and type(obj) in (self.np.ndarray,
                                                  self.np.matrix,
                                                  self.np.memmap):
-            size = obj.size * obj.itemsize
-            if self.compress and size < self.cache_size * _MEGA:
+            if self.compress:
                 # When compressing, as we are not writing directly to the
                 # disk, it is more efficient to use standard pickling
                 if type(obj) is self.np.memmap:
@@ -259,7 +257,7 @@ class NumpyUnpickler(Unpickler):
 ###############################################################################
 # Utility functions
 
-def dump(value, filename, compress=0, cache_size=100, protocol=None):
+def dump(value, filename, compress=0, protocol=None, cache_size=0):
     """Persist an arbitrary Python object.
 
     Fast persistence of an arbitrary Python object into one file with
@@ -277,13 +275,14 @@ def dump(value, filename, compress=0, cache_size=100, protocol=None):
         write times. Using a value of 3 is often a good compromise.
         See the notes for more details.
         If compress is True, the compression level used is 3.
+    protocol: positive int
+        Pickle protocol, see pickle.dump documentation for more details.
     cache_size: positive number, optional
         Fixes the order of magnitude (in megabytes) of the cache used
         for in-memory compression. Note that this is just an order of
         magnitude estimate and that for big arrays, the code will go
         over this value at dump and at load time.
-    protocol: positive int
-        Pickle protocol, see pickle.dump documentation for more details.
+        This option is deprecated in 0.10.
 
     Returns
     -------
@@ -314,13 +313,18 @@ def dump(value, filename, compress=0, cache_size=100, protocol=None):
             'Second argument should be a filename, %s (type %s) was given'
             % (filename, type(filename))
         )
+    if cache_size > 0:
+        # Cache size is deprecated starting from version 0.10
+        warnings.warn("Cache size is set to a value > 0 but won't be used.",
+                      DeprecationWarning, stacklevel=2)
 
     try:
         if compress > 0:
-            fp = gzip_file_factory(filename, 'wb', compresslevel=compress)
+            fp = gzip_file_factory(filename, 'wb',
+                                   compresslevel=compress)
         else:
             fp = open(filename, 'wb')
-        pickler = NumpyPickler(fp, cache_size=cache_size, protocol=protocol)
+        pickler = NumpyPickler(fp, protocol=protocol)
         pickler.dump(value)
     finally:
         if 'pickler' in locals() and hasattr(pickler, 'file'):
@@ -371,9 +375,9 @@ def load(filename, mmap_mode=None):
 
     with closing(_check_filetype(filename, magic)) as file_handle:
         if isinstance(file_handle, gzip.GzipFile) and mmap_mode is not None:
-            warnings.warn('file "%(filename)s" appears to be a zip, '
-                          'ignoring mmap_mode "%(mmap_mode)s" flag passed'
-                          % locals(), Warning, stacklevel=2)
+            raise ValueError('File "%(filename)s" appears to be compressed, '
+                             'ignoring mmap_mode "%(mmap_mode)s" flag passed'
+                             % locals())
 
         # We are careful to open the file handle early and keep it open to
         # avoid race-conditions on renames. That said, if data are stored in

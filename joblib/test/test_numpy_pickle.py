@@ -206,7 +206,8 @@ def test_numpy_persistence():
     # Finally smoke test the warning in case of compress + mmap_mode
     this_filename = filename + str(random.randint(0, 1000))
     numpy_pickle.dump(a, this_filename, compress=1)
-    numpy_pickle.load(this_filename, mmap_mode='r')
+    nose.tools.assert_raises(ValueError, numpy_pickle.load,
+                             this_filename, mmap_mode='r')
 
 
 @with_numpy

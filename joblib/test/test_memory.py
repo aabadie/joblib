@@ -126,10 +126,16 @@ def test_memory_integration():
             # happens if the directory disappears
             shutil.rmtree(env['dir'], ignore_errors=True)
             g = memory.cache(f)
-            g(1)
-            g.clear(warn=False)
-            current_accumulator = len(accumulator)
-            out = g(1)
+            if compress is True and mmap_mode == 'r':
+                # Should raise an exception
+                nose.tools.assert_raises(ValueError, g, 1)
+                # We skip the rest
+                continue
+            else:
+                g(1)
+                g.clear(warn=False)
+                current_accumulator = len(accumulator)
+                out = g(1)
         finally:
             sys.stdout = orig_stdout
             sys.stderr = orig_stderr

@@ -63,6 +63,43 @@ def gzip_file_factory(f, mode='rb', compresslevel=0):
 
     class GzipFile(gzip.GzipFile):
 
+        def _init_write(self, filename):
+            self.name = filename
+            self.crc = 0xffffffff
+            self.size = 0
+            self.writebuf = []
+            self.bufsize = 0
+
+        def write(self, data):
+            try:
+                # works with Python < 3.5
+                self._check_closed()
+            except AttributeError:
+                pass
+            if self.mode != WRITE:
+                import errno
+                raise OSError(errno.EBADF,
+                              "write() on read-only GzipFile object")
+
+            if self.fileobj is None:
+                raise ValueError("write() on closed GzipFile object")
+
+            # Convert data type if called by io.BufferedWriter.
+            if not PY26 and isinstance(data, memoryview):
+                data = data.tobytes()
+
+            if len(data) > 0:
+                self.size = self.size + len(data)
+                self.crc = 0xffffffff
+                self.fileobj.write(self.compress.compress(data))
+                try:
+                    # works with Python < 3.5
+                    self.offset += len(data)
+                except AttributeError:
+                    pass
+
+            return len(data)
+
         def _read_eof(self):
             pass
 
