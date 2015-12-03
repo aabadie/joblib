@@ -20,29 +20,14 @@ if PY3:
     Unpickler = pickle._Unpickler
     Pickler = pickle._Pickler
     xrange = range
-
-    def _asbytes(s):
-        if isinstance(s, bytes):
-            return s
-        return s.encode('latin1')
-
 else:
     Unpickler = pickle.Unpickler
     Pickler = pickle.Pickler
-    _asbytes = str
 
 
 def hex_str(an_int):
     """Convert an int to an hexadecimal string."""
     return '{0:#x}'.format(an_int)
-
-_MEGA = 2 ** 20
-
-# Compressed pickle header format: _ZFILE_PREFIX followed by
-# bytes which contains the length of the zlib compressed data as an
-# hexadecimal string. For example: 'ZF0x139              '
-_ZFILE_PREFIX = _asbytes('ZF')
-_GZIP_PREFIX = b'\x1f\x8b'
 
 try:
     import numpy as np
@@ -53,8 +38,23 @@ try:
     MAGIC_LEN = len(MAGIC_PREFIX) + 2
     BUFFER_SIZE = 2**18  # size of buffer for reading npz files in bytes
 except ImportError:
+    if PY3:
+        def asbytes(s):
+            if isinstance(s, bytes):
+                return s
+            return s.encode('latin1')
+    else:
+        asbytes = str
+
     np = None
 
+_MEGA = 2 ** 20
+
+# Compressed pickle header format: _ZFILE_PREFIX followed by
+# bytes which contains the length of the zlib compressed data as an
+# hexadecimal string. For example: 'ZF0x139              '
+_ZFILE_PREFIX = asbytes('ZF')
+_GZIP_PREFIX = b'\x1f\x8b'
 
 def gzip_file_factory(f, mode='rb', compresslevel=0):
     """Factory to produce the class so that we can do a lazy import on gzip."""
@@ -172,8 +172,6 @@ def _open_memmap(filename, array_offset=0, mode='r+', dtype=None, shape=None,
 
     This may be used to read an existing file or create a new one.
 
-    Taken from numpy 1.10
-
     Parameters
     ----------
     filename : str
@@ -217,6 +215,11 @@ def _open_memmap(filename, array_offset=0, mode='r+', dtype=None, shape=None,
     See Also
     --------
     memmap
+
+    Note
+    ----
+    Monkey patched version of open_memmap function taken from
+    numpy.lib.format.py file.
 
     """
     # Read the header of the array first.

@@ -9,7 +9,7 @@ import sys
 import re
 import tempfile
 import glob
-
+import warnings
 import nose
 
 from joblib.test.common import np, with_numpy
@@ -18,6 +18,8 @@ from joblib.test.common import np, with_numpy
 # filenames instead of open files as arguments.
 from joblib import numpy_pickle
 from joblib.test import data
+
+from joblib import __version__ as JOBLIB_VERSION
 
 ###############################################################################
 # Define a list of standard types.
@@ -153,14 +155,28 @@ def test_numpy_persistence():
     filename = env['filename']
     rnd = np.random.RandomState(0)
     a = rnd.random_sample((10, 2))
-    for compress, cache_size in ((0, 0), (1, 0), (0, 10), (1, 10)):
+    for compress, cache_size in ((0, None), (0, None),
+                                 (0, 0), (1, 0),
+                                 (0, 10), (1, 10)):
         # We use 'a.T' to have a non C-contiguous array.
         for index, obj in enumerate(((a,), (a.T,), (a, a), [a, a, a])):
             # Change the file name to avoid side effects between tests
             this_filename = filename + str(random.randint(0, 1000))
-            filenames = numpy_pickle.dump(obj, this_filename,
-                                          compress=compress,
-                                          cache_size=cache_size)
+
+            # Check warning if cache size is set
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                filenames = numpy_pickle.dump(obj, this_filename,
+                                              compress=compress,
+                                              cache_size=cache_size)
+                nose.tools.assert_equal(len(w),
+                                        1 if cache_size is not None else 0)
+                for warn in w:
+                    nose.tools.assert_equal(warn.category, DeprecationWarning)
+                    nose.tools.assert_equal(warn.message.args[0],
+                                            'Cache size is deprecated and '
+                                            'will be ignored.')
+
             # Check that one file was created per array
             for fname in filenames:
                 if not compress:
@@ -366,7 +382,18 @@ def _check_pickle(filename, expected_list):
         py_version_used_for_writing, 4)
     if pickle_reading_protocol >= pickle_writing_protocol:
         try:
-            result_list = numpy_pickle.load(filename)
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                result_list = numpy_pickle.load(filename)
+                nose.tools.assert_equal(len(w),
+                                        1 if ("0.9.2" in filename or
+                                              "0.8.4" in filename) else 0)
+            for warn in w:
+                nose.tools.assert_equal(warn.category, DeprecationWarning)
+                nose.tools.assert_equal(warn.message.args[0],
+                                        "You are using an old version of "
+                                        "joblib cache. Please regenerate your "
+                                        "cache.")
             for result, expected in zip(result_list, expected_list):
                 if isinstance(expected, np.ndarray):
                     nose.tools.assert_equal(result.dtype, expected.dtype)

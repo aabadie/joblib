@@ -10,7 +10,7 @@ from ctypes import c_int64
 from contextlib import closing
 
 from .numpy_pickle_utils import PY3, _ZFILE_PREFIX, _MEGA
-from .numpy_pickle_utils import hex_str, _asbytes
+from .numpy_pickle_utils import hex_str, asbytes
 from .numpy_pickle_utils import Unpickler, Pickler
 
 from ._compat import _basestring
@@ -62,8 +62,8 @@ def write_zfile(file_handle, data, compress=1):
     file_handle.write(_ZFILE_PREFIX)
     length = hex_str(len(data))
     # Store the length of the data
-    file_handle.write(_asbytes(length.ljust(_MAX_LEN)))
-    file_handle.write(zlib.compress(_asbytes(data), compress))
+    file_handle.write(asbytes(length.ljust(_MAX_LEN)))
+    file_handle.write(zlib.compress(asbytes(data), compress))
 
 ###############################################################################
 # Utility objects for persistence.

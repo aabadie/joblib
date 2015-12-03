@@ -13,7 +13,7 @@ import io
 
 from contextlib import closing
 
-from .numpy_pickle_utils import _MEGA, PY3
+from .numpy_pickle_utils import PY3
 from .numpy_pickle_utils import _ZFILE_PREFIX, _GZIP_PREFIX
 from .numpy_pickle_utils import Unpickler, Pickler
 from .numpy_pickle_utils import gzip_file_factory
@@ -22,20 +22,9 @@ from .numpy_pickle_utils import _open_memmap
 from .numpy_pickle_compat import load_compatibility, NDArrayWrapper
 from ._compat import _basestring
 
-# Trying to import from numpy first (works for numpy >= 1.9)
-try:
-    from numpy.lib.format import _read_array_header, _check_version
-    from numpy.lib.format import _filter_header, _read_bytes
-    from numpy.lib.format import _read_magic as _read_numpy_magic
-except ImportError:
-    # Use numpy functions available from our code for numpy versions < 1.9
-    from .numpy_pickle_utils import _read_array_header, _check_version
-    from .numpy_pickle_utils import _filter_header, _read_bytes
-    from .numpy_pickle_utils import _read_numpy_magic
-
-
 ###############################################################################
 # Utility objects for persistence.
+
 
 class NumpyArrayWrapper(object):
     """An object to be persisted instead of numpy arrays.
@@ -222,6 +211,7 @@ class NumpyUnpickler(Unpickler):
         self.mmap_mode = mmap_mode
         self.file_handle = file_handle
         self.filename = filename
+        self.compat_mode = False
         Unpickler.__init__(self, self.file_handle)
         try:
             import numpy as np
@@ -243,8 +233,9 @@ class NumpyUnpickler(Unpickler):
             if self.np is None:
                 raise ImportError("Trying to unpickle an ndarray, "
                                   "but numpy didn't import correctly")
-            nd_array_wrapper = self.stack.pop()
-            array = nd_array_wrapper.read(self)
+            array_wrapper = self.stack.pop()
+            self.compat_mode = isinstance(array_wrapper, NDArrayWrapper)
+            array = array_wrapper.read(self)
             self.stack.append(array)
 
     # Be careful to register our new method.
@@ -257,7 +248,7 @@ class NumpyUnpickler(Unpickler):
 ###############################################################################
 # Utility functions
 
-def dump(value, filename, compress=0, protocol=None, cache_size=0):
+def dump(value, filename, compress=0, protocol=None, cache_size=None):
     """Persist an arbitrary Python object.
 
     Fast persistence of an arbitrary Python object into one file with
@@ -267,9 +258,9 @@ def dump(value, filename, compress=0, protocol=None, cache_size=0):
     -----------
     value: any Python object
         The object to store to disk
-    filename: string
+    filename: str
         The name of the file in which it is to be stored
-    compress: integer from 0 to 9 or boolean, optional
+    compress: int from 0 to 9 or bool, optional
         Optional compression level for the data. 0 or False is no compression.
         Higher means more compression, but also slower read and
         write times. Using a value of 3 is often a good compromise.
@@ -277,7 +268,7 @@ def dump(value, filename, compress=0, protocol=None, cache_size=0):
         If compress is True, the compression level used is 3.
     protocol: positive int
         Pickle protocol, see pickle.dump documentation for more details.
-    cache_size: positive number, optional
+    cache_size: positive int, optional
         Fixes the order of magnitude (in megabytes) of the cache used
         for in-memory compression. Note that this is just an order of
         magnitude estimate and that for big arrays, the code will go
@@ -313,9 +304,9 @@ def dump(value, filename, compress=0, protocol=None, cache_size=0):
             'Second argument should be a filename, %s (type %s) was given'
             % (filename, type(filename))
         )
-    if cache_size > 0:
+    if cache_size is not None:
         # Cache size is deprecated starting from version 0.10
-        warnings.warn("Cache size is set to a value > 0 but won't be used.",
+        warnings.warn("Cache size is deprecated and will be ignored.",
                       DeprecationWarning, stacklevel=2)
 
     try:
@@ -338,7 +329,7 @@ def load(filename, mmap_mode=None):
 
     Parameters
     -----------
-    filename: string
+    filename: str
         The name of the file from which to load the object
     mmap_mode: {None, 'r+', 'r', 'w+', 'c'}, optional
         If not None, the arrays are memory-mapped from the disk. This
@@ -364,13 +355,14 @@ def load(filename, mmap_mode=None):
     object might not match the original pickled object. Note that if the
     file was saved with compression, the arrays cannot be memmaped.
     """
-    # Determine
-    magic = b''
     with open(filename, 'rb') as file_handle:
         magic = _read_magic(file_handle)
 
     # Backward compatibility with old compression strategy
     if magic == _ZFILE_PREFIX:
+        warnings.warn("You are using an old version of joblib cache. Please "
+                      "regenerate your cache.",
+                      DeprecationWarning, stacklevel=2)
         return load_compatibility(filename)
 
     with closing(_check_filetype(filename, magic)) as file_handle:
@@ -388,6 +380,10 @@ def load(filename, mmap_mode=None):
                                    mmap_mode=mmap_mode)
         try:
             obj = unpickler.load()
+            if unpickler.compat_mode:
+                warnings.warn("You are using an old version of joblib cache. "
+                              "Please regenerate your cache.",
+                              DeprecationWarning, stacklevel=2)
         except UnicodeDecodeError as exc:
             # More user-friendly error message
             if PY3:

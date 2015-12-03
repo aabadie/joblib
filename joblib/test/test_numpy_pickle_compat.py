@@ -46,7 +46,7 @@ def teardown_module():
 def test_z_file():
     """Test saving and loading data with Zfiles."""
     filename = env['filename'] + str(random.randint(0, 1000))
-    data = numpy_pickle_utils._asbytes('Foo, \n Bar, baz, \n\nfoobar')
+    data = numpy_pickle_utils.asbytes('Foo, \n Bar, baz, \n\nfoobar')
     with open(filename, 'wb') as f:
         numpy_pickle_compat.write_zfile(f, data)
     with open(filename, 'rb') as f:
