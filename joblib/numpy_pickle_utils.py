@@ -51,6 +51,7 @@ _MEGA = 2 ** 20
 _ZFILE_PREFIX = asbytes('ZF')
 _GZIP_PREFIX = b'\x1f\x8b'
 
+
 def gzip_file_factory(f, mode='rb', compresslevel=0):
     """Factory to produce the class so that we can do a lazy import on gzip."""
     import gzip
