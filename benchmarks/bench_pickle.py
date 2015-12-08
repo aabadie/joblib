@@ -10,6 +10,7 @@ import time
 import shutil
 import numpy as np
 import joblib
+import gc
 
 from joblib.disk import disk_used
 
@@ -41,10 +42,17 @@ def kill_disk_cache():
         file('tmp', 'w').write(np.random.random(2e7))
 
 
+def delete_obj(obj):
+    """Force destruction of an object."""
+    if obj is not None:
+        del obj
+    gc.collect()
+
+
 def memory_used(func, *args, **kwargs):
     """Compute memory usage of func."""
     if memory_usage is None:
-        return None
+        return np.NaN
 
     ref_mem = memory_usage(-1, interval=.2, timeout=1, max_usage=True)
     mem_use = memory_usage((func, args, kwargs),
@@ -74,7 +82,7 @@ def timeit(func, *args, **kwargs):
             t2 = time.time()
             times.append(t2 - t0 - 2*(t2 - t1))
     times.sort()
-    return np.mean(times[1:-1])
+    return np.mean(times[1:-1]), out
 
 
 def generate_rand_dict(size):
@@ -107,16 +115,16 @@ def bench_compress(dataset, name='',
     mem_read = list()
     mem_write = list()
     clear_out()
-    #time_write = timeit(joblib.dump, dataset, 'out/test.pkl',
-    #                    compress=compress, cache_size=cache_size)
-    time_write = 0.0
+    time_write, _ = timeit(joblib.dump, dataset, 'out/test.pkl',
+                           compress=compress, cache_size=cache_size)
     mem_write = memory_used(joblib.dump, dataset, 'out/test.pkl',
                             compress=compress, cache_size=cache_size)
 
-    del dataset
+    delete_obj(dataset)
+
     du = disk_used('out')/1024.
-    #time_read = timeit(joblib.load, 'out/test.pkl')
-    time_read = 0.0
+    time_read, obj = timeit(joblib.load, 'out/test.pkl')
+    delete_obj(obj)
     mem_read = memory_used(joblib.load, 'out/test.pkl')
     print_line(name, 'compress %i' % compress,
                time_write, time_read, mem_write, mem_read, du)
@@ -128,13 +136,15 @@ def bench_mmap(dataset, name='', cache_size=0, mmap_mode='r'):
     time_read = list()
     du = list()
     clear_out()
-    #time_write = timeit(joblib.dump, dataset, 'out/test.pkl')
-    time_write = 0.0
-    mem_write = memory_used(joblib.dump, dataset, 'out/test.pkl')
-    del dataset
+    time_write, _ = timeit(joblib.dump, dataset, 'out/test.pkl',
+                           cache_size=cache_size)
+    mem_write = memory_used(joblib.dump, dataset, 'out/test.pkl',
+                            cache_size=cache_size)
 
-    #time_read = timeit(joblib.load, 'out/test.pkl', mmap_mode=mmap_mode)
-    time_read = 0.0
+    delete_obj(dataset)
+
+    time_read, obj = timeit(joblib.load, 'out/test.pkl', mmap_mode=mmap_mode)
+    delete_obj(obj)
     mem_read = memory_used(joblib.load, 'out/test.pkl', mmap_mode=mmap_mode)
     du = disk_used('out')/1024.
     print_line(name, 'mmap %s' % mmap_mode,
@@ -146,22 +156,17 @@ def run_bench(func, obj, name, **kwargs):
     func(obj, name, **kwargs)
 
 
-class BenchObj(object):
-    """Dummy benchmark object for complex pickling."""
-
-    pass
-
-
 def run(args):
     """Run the full bench suite."""
     print('% 15s, %12s, % 6s, % 7s, % 9s, % 9s, % 5s' % (
             'Dataset', 'strategy', 'write', 'read',
-            'mem write', 'mem read', 'disk'))
+            'mem_write', 'mem_read', 'disk'))
 
     compress_levels = args.compress
     mmap_mode = args.mmap
+
     dict_size = 10000
-    a1_shape = (10000, 10000)
+    a1_shape = (5000, 5000)
     a2_shape = (10000000, )
 
     if args.nifti:
@@ -194,8 +199,8 @@ def run(args):
                         run_bench(bench_compress, d, name_d,
                                   compress=compress)
                         del d
-                    d = load_nii(nifti_file)
 
+                    d = load_nii(nifti_file)
                     if c_order:
                         d = (np.ascontiguousarray(d[0]), d[1])
 
@@ -223,44 +228,39 @@ def run(args):
         # Complex object with 2 big arrays
         name = '% 5s' % '2 big arrays'
         for compress in compress_levels:
-            obj = BenchObj()
-            obj.a1 = rnd.random_sample(a1_shape)
-            obj.a2 = rnd.random_sample(a2_shape)
+            obj = [rnd.random_sample(a1_shape), rnd.random_sample(a2_shape)]
             run_bench(bench_compress, obj, name, compress=compress)
             del obj
 
-        obj = BenchObj()
-        obj.a1 = rnd.random_sample(a1_shape)
-        obj.a2 = rnd.random_sample(a2_shape)
+        obj = [rnd.random_sample(a1_shape), rnd.random_sample(a2_shape)]
         run_bench(bench_mmap, obj, name, mmap_mode=mmap_mode)
         del obj
 
     if args.dict:
         # Big dictionnary
         name = '% 5s' % 'Big dict'
-        big_dict = generate_rand_dict(dict_size)
-        run_bench(bench_compress, big_dict, name,
-                  compress_levels=compress_levels)
-        del dict
+        for compress in compress_levels:
+            big_dict = generate_rand_dict(dict_size)
+            run_bench(bench_compress, big_dict, name,
+                      compress=compress)
+            del big_dict
         big_dict = generate_rand_dict(dict_size)
         run_bench(bench_mmap, big_dict, name, mmap_mode=mmap_mode)
-        del dict
+        del big_dict
 
     if args.combo:
         # 2 big arrays with one big dict
         name = '% 5s' % 'Dict/arrays'
         for compress in compress_levels:
-            obj = BenchObj()
-            obj.a1 = rnd.random_sample(a1_shape)
-            obj.a2 = rnd.random_sample(a2_shape)
-            obj.big_dict = big_dict
+            obj = [rnd.random_sample(a1_shape),
+                   generate_rand_dict(dict_size),
+                   rnd.random_sample(a2_shape)]
             run_bench(bench_compress, obj, name, compress=compress)
             del obj
 
-        obj = BenchObj()
-        obj.a1 = rnd.random_sample(a1_shape)
-        obj.a2 = rnd.random_sample(a2_shape)
-        obj.big_dict = big_dict
+        obj = [rnd.random_sample(a1_shape),
+               generate_rand_dict(dict_size),
+               rnd.random_sample(a2_shape)]
         run_bench(bench_mmap, obj, name, mmap_mode=mmap_mode)
         del obj
 

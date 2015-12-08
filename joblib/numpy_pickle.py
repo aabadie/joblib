@@ -166,12 +166,9 @@ class NumpyPickler(Pickler):
         if self.np is not None and type(obj) in (self.np.ndarray,
                                                  self.np.matrix,
                                                  self.np.memmap):
-            if self.compress:
-                # When compressing, as we are not writing directly to the
-                # disk, it is more efficient to use standard pickling
-                if type(obj) is self.np.memmap:
-                    # Pickling doesn't work with memmapped arrays
-                    obj = self.np.asarray(obj)
+            if type(obj) is self.np.memmap:
+                # Pickling doesn't work with memmapped arrays
+                obj = self.np.asarray(obj)
                 return Pickler.save(self, obj)
 
             # This converts on the fly the array in a wrapper
@@ -235,8 +232,7 @@ class NumpyUnpickler(Unpickler):
                                   "but numpy didn't import correctly")
             array_wrapper = self.stack.pop()
             self.compat_mode = isinstance(array_wrapper, NDArrayWrapper)
-            array = array_wrapper.read(self)
-            self.stack.append(array)
+            self.stack.append(array_wrapper.read(self))
 
     # Be careful to register our new method.
     if PY3:
@@ -308,7 +304,6 @@ def dump(value, filename, compress=0, protocol=None, cache_size=None):
         # Cache size is deprecated starting from version 0.10
         warnings.warn("Cache size is deprecated and will be ignored.",
                       DeprecationWarning, stacklevel=2)
-
     try:
         if compress > 0:
             fp = gzip_file_factory(filename, 'wb',
