@@ -1,6 +1,18 @@
 Latest changes
 ===============
 
+Release 0.10.0
+--------------
+
+Alexandre Abadie
+
+    Joblib now uses a single file for caching objects with dump and
+    load functions. Note that this version breaks the pickle format.
+    Old joblib cache files are still compatible with this version but we
+    recommend to clear old cache files and recreate them if possible.
+    A special care was taken with memory consumption: when reading and writing
+    a cache file using the compressed mode, objects are never copied.
+
 Release 0.9.3
 -------------
 
