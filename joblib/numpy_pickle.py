@@ -6,15 +6,13 @@
 
 import pickle
 import os
-import sys
 import gzip
 import warnings
-import io
 
 from contextlib import closing
 
 from .numpy_pickle_utils import PY3
-from .numpy_pickle_utils import _ZFILE_PREFIX, _GZIP_PREFIX
+from .numpy_pickle_utils import _ZFILE_PREFIX
 from .numpy_pickle_utils import Unpickler, Pickler
 from .numpy_pickle_utils import gzip_file_factory
 from .numpy_pickle_utils import _read_magic, _check_filetype
@@ -94,25 +92,18 @@ class NumpyPickler(Pickler):
     """A pickler to persist of big data efficiently.
 
     The main features of this object are:
-    * persistence of numpy arrays in separate .npy files, for which
-    I/O is fast.
+    * persistence of numpy arrays in a single file.
 
-    * optional compression using Zlib, with a special care on avoid
+    * optional compression using GzipFile, with a special care on avoid
     temporaries.
 
     Attributes
     ----------
     fp: file
         File object handle used for serializing the input object.
-    cache_size: int
-        The maximum object size until the default pickle is used.
     protocol: int
         Pickle protocol used. Default is pickle.DEFAULT_PROTOCOL under
         python 3, pickle.HIGHEST_PROTOCOL otherwise.
-    offset: int
-        Position from where it is safe to write in the target file after
-        pickle serialization completes. This is the position where the
-        first numpy array starts to be written in the file.
     """
 
     dispatch = Pickler.dispatch.copy()
@@ -137,17 +128,7 @@ class NumpyPickler(Pickler):
         self.np = np
 
     def _create_array_wrapper(self, array):
-        """Create and returns a numpy array wrapper from a numpy array.
-
-        Parameters
-        ----------
-        array: numpy.ndarray
-
-        Returns
-        -------
-        wrapper: NumpyArrayWrapper:
-            The numpy array wrapper.
-        """
+        """Create and returns a numpy array wrapper from a numpy array."""
         allow_mmap = not array.dtype.hasobject and not self.compress
         wrapper = NumpyArrayWrapper(type(array),
                                     array.dtype,
@@ -158,10 +139,12 @@ class NumpyPickler(Pickler):
     def save(self, obj):
         """Subclass the Pickler `save` method.
 
-        To save ndarray subclasses in npy
-        files, rather than pickling them. Of course, this is a
-        total abuse of the Pickler class.
-
+        This is a total abuse of the Pickler class in order to use the numpy
+        persistence function `save` instead of the default pickle
+        implementation. The numpy array is replaced by a custom wrapper in the
+        pickle persistence stack and the serialized array is written right
+        after in the file. Warning: this breaks the pickle format and prevents
+        the usage of pickletools.dis() function.
         """
         if self.np is not None and type(obj) in (self.np.ndarray,
                                                  self.np.matrix,
@@ -300,10 +283,12 @@ def dump(value, filename, compress=0, protocol=None, cache_size=None):
             'Second argument should be a filename, %s (type %s) was given'
             % (filename, type(filename))
         )
+
     if cache_size is not None:
         # Cache size is deprecated starting from version 0.10
         warnings.warn("Cache size is deprecated and will be ignored.",
                       DeprecationWarning, stacklevel=2)
+
     try:
         if compress > 0:
             fp = gzip_file_factory(filename, 'wb',
@@ -362,14 +347,16 @@ def load(filename, mmap_mode=None):
 
     with closing(_check_filetype(filename, magic)) as file_handle:
         if isinstance(file_handle, gzip.GzipFile) and mmap_mode is not None:
-            raise ValueError('File "%(filename)s" appears to be compressed, '
-                             'ignoring mmap_mode "%(mmap_mode)s" flag passed'
-                             % locals())
+            warnings.warn('File "%(filename)s" appears to be compressed, '
+                          'this is not compatible with mmap_mode '
+                          '"%(mmap_mode)s" flag passed' % locals(),
+                          DeprecationWarning, stacklevel=2)
 
         # We are careful to open the file handle early and keep it open to
-        # avoid race-conditions on renames. That said, if data are stored in
-        # companion files, moving the directory will create a race when
-        # joblib tries to access the companion files.
+        # avoid race-conditions on renames.
+        # That said, if data are stored in companion files, which can be the
+        # case with the old persistence format, moving the directory will
+        # create a race when joblib tries to access the companion files.
         unpickler = NumpyUnpickler(filename,
                                    file_handle,
                                    mmap_mode=mmap_mode)

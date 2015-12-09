@@ -5,13 +5,8 @@
 # License: BSD Style, 3 clauses.
 
 import pickle
-import traceback
 import sys
-import os
-import warnings
-
-from ._compat import _basestring
-
+import io
 
 PY3 = sys.version_info[0] >= 3
 PY26 = sys.version_info[0] == 2 and sys.version_info[1] == 6
@@ -215,7 +210,7 @@ def _open_memmap(filename, array_offset=0, mode='r+', dtype=None, shape=None,
     Note
     ----
     Monkey patched version of open_memmap function taken from
-    numpy.lib.format.py file.
+    numpy/lib/format.py file in numpy 0.10.
 
     """
     # Read the header of the array first.

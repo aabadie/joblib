@@ -2,18 +2,12 @@
 
 import pickle
 import os
-import sys
 import zlib
-import warnings
 from io import BytesIO
-from ctypes import c_int64
-from contextlib import closing
 
-from .numpy_pickle_utils import PY3, _ZFILE_PREFIX, _MEGA
+from .numpy_pickle_utils import PY3, _ZFILE_PREFIX
 from .numpy_pickle_utils import hex_str, asbytes
-from .numpy_pickle_utils import Unpickler, Pickler
-
-from ._compat import _basestring
+from .numpy_pickle_utils import Unpickler
 
 _MAX_LEN = len(hex_str(2 ** 64))
 _CHUNK_SIZE = 64 * 1024
@@ -188,15 +182,13 @@ class ZipNumpyUnpickler(Unpickler):
 def load_compatibility(filename):
     """Reconstruct a Python object from a file persisted with joblib.dump.
 
+    This function ensures the compatibility with joblib old persistence format
+    (<= 0.9.3).
+
     Parameters
     -----------
     filename: string
         The name of the file from which to load the object
-    mmap_mode: {None, 'r+', 'r', 'w+', 'c'}, optional
-        If not None, the arrays are memory-mapped from the disk. This
-        mode has no effect for compressed files. Note that in this
-        case the reconstructed object might not longer match exactly
-        the originally pickled object.
 
     Returns
     -------
@@ -211,10 +203,7 @@ def load_compatibility(filename):
     -----
 
     This function can load numpy array files saved separately during the
-    dump. If the mmap_mode argument is given, it is passed to np.load and
-    arrays are loaded as memmaps. As a consequence, the reconstructed
-    object might not match the original pickled object. Note that if the
-    file was saved with compression, the arrays cannot be memmaped.
+    dump.
     """
     with open(filename, 'rb') as file_handle:
         # We are careful to open the file handle early and keep it open to

@@ -19,8 +19,6 @@ from joblib.test.common import np, with_numpy
 from joblib import numpy_pickle
 from joblib.test import data
 
-from joblib import __version__ as JOBLIB_VERSION
-
 ###############################################################################
 # Define a list of standard types.
 # Borrowed from dill, initial author: Micheal McKerns:
@@ -155,27 +153,15 @@ def test_numpy_persistence():
     filename = env['filename']
     rnd = np.random.RandomState(0)
     a = rnd.random_sample((10, 2))
-    for compress, cache_size in ((0, None), (0, None),
-                                 (0, 0), (1, 0),
-                                 (0, 10), (1, 10)):
+    for compress in (False, True, 0, 3):
         # We use 'a.T' to have a non C-contiguous array.
         for index, obj in enumerate(((a,), (a.T,), (a, a), [a, a, a])):
             # Change the file name to avoid side effects between tests
             this_filename = filename + str(random.randint(0, 1000))
 
             # Check warning if cache size is set
-            with warnings.catch_warnings(record=True) as w:
-                warnings.simplefilter("always")
-                filenames = numpy_pickle.dump(obj, this_filename,
-                                              compress=compress,
-                                              cache_size=cache_size)
-                nose.tools.assert_equal(len(w),
-                                        1 if cache_size is not None else 0)
-                for warn in w:
-                    nose.tools.assert_equal(warn.category, DeprecationWarning)
-                    nose.tools.assert_equal(warn.message.args[0],
-                                            'Cache size is deprecated and '
-                                            'will be ignored.')
+            filenames = numpy_pickle.dump(obj, this_filename,
+                                          compress=compress)
 
             # Check that one file was created per array
             for fname in filenames:
@@ -200,8 +186,7 @@ def test_numpy_persistence():
                    ):
             this_filename = filename + str(random.randint(0, 1000))
             filenames = numpy_pickle.dump(obj, this_filename,
-                                          compress=compress,
-                                          cache_size=cache_size)
+                                          compress=compress)
             obj_ = numpy_pickle.load(this_filename)
             if (type(obj) is not np.memmap and
                     hasattr(obj, '__array_prepare__')):
@@ -211,19 +196,12 @@ def test_numpy_persistence():
         # Test with an object containing multiple numpy arrays
         obj = ComplexTestObject()
         filenames = numpy_pickle.dump(obj, this_filename,
-                                      compress=compress,
-                                      cache_size=cache_size)
+                                      compress=compress)
         obj_loaded = numpy_pickle.load(this_filename)
         nose.tools.assert_true(isinstance(obj_loaded, type(obj)))
         np.testing.assert_array_equal(obj_loaded.array_float, obj.array_float)
         np.testing.assert_array_equal(obj_loaded.array_int, obj.array_int)
         np.testing.assert_array_equal(obj_loaded.array_obj, obj.array_obj)
-
-    # Finally smoke test the warning in case of compress + mmap_mode
-    this_filename = filename + str(random.randint(0, 1000))
-    numpy_pickle.dump(a, this_filename, compress=1)
-    nose.tools.assert_raises(ValueError, numpy_pickle.load,
-                             this_filename, mmap_mode='r')
 
 
 @with_numpy
@@ -269,7 +247,7 @@ def test_memmap_persistence():
     np.testing.assert_array_equal(obj_reloaded.array_int,
                                   obj_loaded.array_int)
 
-    # Test w+ mode is catched and the mode has switched to r+
+    # Test w+ mode is caught and the mode has switched to r+
     obj_mode_w = numpy_pickle.load(filename, mmap_mode='w+')
     nose.tools.assert_true(obj_loaded.array_int.flags.writeable)
     nose.tools.assert_equal(obj_loaded.array_int.mode, 'r+')
@@ -316,6 +294,7 @@ def test_memmap_persistence_numpy_function():
     nose.tools.assert_raises(ValueError, numpy_pickle._open_memmap,
                              filename, dtype=b.dtype, shape=b.shape)
 
+
 @with_numpy
 def test_masked_array_persistence():
     # The special-case picker fails, because saving masked_array
@@ -327,6 +306,47 @@ def test_masked_array_persistence():
     numpy_pickle.dump(a, filename)
     b = numpy_pickle.load(filename, mmap_mode='r')
     nose.tools.assert_true(isinstance(b, np.ma.masked_array))
+
+
+@with_numpy
+def test_compress_mmap_mode_warning():
+    # Test the warning in case of compress + mmap_mode
+    rnd = np.random.RandomState(0)
+    a = rnd.random_sample(10)
+    this_filename = env['filename'] + str(random.randint(0, 1000))
+    numpy_pickle.dump(a, this_filename, compress=1)
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        numpy_pickle.load(this_filename, mmap_mode='r+')
+        nose.tools.assert_equal(len(w), 1)
+        for warn in w:
+            nose.tools.assert_equal(warn.category, DeprecationWarning)
+            nose.tools.assert_equal(warn.message.args[0],
+                                    'File "%(filename)s" appears to be '
+                                    'compressed, this is not compatible with '
+                                    'mmap_mode "%(mmap_mode)s" flag passed' %
+                                    {'filename': this_filename,
+                                     'mmap_mode': 'r+'})
+
+@with_numpy
+def test_cache_size_warning():
+    # Check deprecation warning raised when cache size is not None
+    filename = env['filename'] + str(random.randint(0, 1000))
+    rnd = np.random.RandomState(0)
+    a = rnd.random_sample((10, 2))
+
+    for cache_size in (None, 0, 10):
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            filenames = numpy_pickle.dump(a, filename,
+                                          cache_size=cache_size)
+            nose.tools.assert_equal(len(w),
+                                    1 if cache_size is not None else 0)
+            for warn in w:
+                nose.tools.assert_equal(warn.category, DeprecationWarning)
+                nose.tools.assert_equal(warn.message.args[0],
+                                        'Cache size is deprecated and '
+                                        'will be ignored.')
 
 
 @with_numpy
