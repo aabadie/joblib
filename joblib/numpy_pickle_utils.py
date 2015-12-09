@@ -159,7 +159,7 @@ def _check_filetype(filename, magic):
 def _open_memmap(filename, array_offset=0, mode='r+', dtype=None, shape=None,
                  fortran_order=False, version=None):
     """
-    Open a .npy file as a memory-mapped array.
+    Open a file as a memory-mapped array.
 
     This may be used to read an existing file or create a new one.
 

@@ -184,8 +184,8 @@ class NumpyUnpickler(Unpickler):
 
     def __init__(self, filename, file_handle, mmap_mode=None):
         """Constructor."""
-        # The 2 next lines are for backward compatibility
-        self._filename = os.path.basename(filename)
+        # The next line is for backward compatibility with pickle generated
+        # with joblib versions less than 0.10.
         self._dirname = os.path.dirname(filename)
 
         self.mmap_mode = mmap_mode
@@ -340,8 +340,9 @@ def load(filename, mmap_mode=None):
 
     # Backward compatibility with old compression strategy
     if magic == _ZFILE_PREFIX:
-        warnings.warn("You are using an old version of joblib cache. Please "
-                      "regenerate your cache.",
+        warnings.warn("The file '%s' has been generated with a joblib version "
+                      "less than 0.10. "
+                      "Please regenerate this pickle file." % filename,
                       DeprecationWarning, stacklevel=2)
         return load_compatibility(filename)
 
@@ -363,8 +364,9 @@ def load(filename, mmap_mode=None):
         try:
             obj = unpickler.load()
             if unpickler.compat_mode:
-                warnings.warn("You are using an old version of joblib cache. "
-                              "Please regenerate your cache.",
+                warnings.warn("The file '%s' has been generated with a joblib "
+                              "version less than 0.10. "
+                              "Please regenerate this pickle file." % filename,
                               DeprecationWarning, stacklevel=2)
         except UnicodeDecodeError as exc:
             # More user-friendly error message

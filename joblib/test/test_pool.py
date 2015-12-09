@@ -405,7 +405,7 @@ def test_memmaping_on_dev_shm():
         assert_equal(a.nbytes, 800)
         p.map(id, [a] * 10)
         # a should have been memmaped to the pool temp folder: the joblib
-        # pickling procedure generate a .pkl and a .npy file:
+        # pickling procedure generate one .pkl file:
         assert_equal(len(os.listdir(pool_temp_folder)), 1)
 
         b = np.ones(100, dtype=np.float64)

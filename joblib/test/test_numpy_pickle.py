@@ -335,6 +335,7 @@ def test_compress_mmap_mode_warning():
                                     {'filename': this_filename,
                                      'mmap_mode': 'r+'})
 
+
 @with_numpy
 def test_cache_size_warning():
     # Check deprecation warning raised when cache size is not None
@@ -418,9 +419,10 @@ def _check_pickle(filename, expected_list):
             for warn in w:
                 nose.tools.assert_equal(warn.category, DeprecationWarning)
                 nose.tools.assert_equal(warn.message.args[0],
-                                        "You are using an old version of "
-                                        "joblib cache. Please regenerate your "
-                                        "cache.")
+                                        "The file '%s' has been generated with "
+                                        "a joblib version less than 0.10. "
+                                        "Please regenerate this pickle file." %
+                                        filename)
             for result, expected in zip(result_list, expected_list):
                 if isinstance(expected, np.ndarray):
                     nose.tools.assert_equal(result.dtype, expected.dtype)
