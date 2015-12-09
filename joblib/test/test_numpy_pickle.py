@@ -163,13 +163,14 @@ def test_numpy_persistence():
             filenames = numpy_pickle.dump(obj, this_filename,
                                           compress=compress)
 
+            # All is cached in one file
+            nose.tools.assert_equal(len(filenames), 1)
             # Check that one file was created per array
-            for fname in filenames:
-                if not compress:
-                    nose.tools.assert_equal(fname, this_filename)
-                # Check that these files do exist
-                nose.tools.assert_true(
-                        os.path.exists(os.path.join(env['dir'], fname)))
+            if not compress:
+                nose.tools.assert_equal(filenames[0], this_filename)
+            # Check that this file does exist
+            nose.tools.assert_true(
+                    os.path.exists(os.path.join(env['dir'], filenames[0])))
 
             # Unpickle the object
             obj_ = numpy_pickle.load(this_filename)
@@ -187,6 +188,9 @@ def test_numpy_persistence():
             this_filename = filename + str(random.randint(0, 1000))
             filenames = numpy_pickle.dump(obj, this_filename,
                                           compress=compress)
+            # All is cached in one file
+            nose.tools.assert_equal(len(filenames), 1)
+
             obj_ = numpy_pickle.load(this_filename)
             if (type(obj) is not np.memmap and
                     hasattr(obj, '__array_prepare__')):
@@ -197,6 +201,9 @@ def test_numpy_persistence():
         obj = ComplexTestObject()
         filenames = numpy_pickle.dump(obj, this_filename,
                                       compress=compress)
+        # All is cached in one file
+        nose.tools.assert_equal(len(filenames), 1)
+
         obj_loaded = numpy_pickle.load(this_filename)
         nose.tools.assert_true(isinstance(obj_loaded, type(obj)))
         np.testing.assert_array_equal(obj_loaded.array_float, obj.array_float)
