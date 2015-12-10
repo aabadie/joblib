@@ -55,25 +55,6 @@ def gzip_file_factory(f, mode='rb', compresslevel=0):
 
     class GzipFile(gzip.GzipFile):
 
-        def seek(self, offset, whence=0):
-            # figure out new position (we can only seek forwards)
-            if whence == 1:
-                offset = self.offset + offset
-
-            if whence not in [0, 1]:
-                raise IOError("Illegal argument")
-
-            if offset < self.offset:
-                # for negative seek, rewind and do positive seek
-                self.rewind()
-                count = offset - self.offset
-                for i in range(count // 1024):
-                    self.read(1024)
-                self.read(count % 1024)
-
-        def tell(self):
-            return self.offset
-
         def _init_write(self, filename):
             self.name = filename
             self.crc = 0xffffffff

@@ -115,16 +115,7 @@ class NumpyArrayWrapper(object):
         # Now read the actual data.
         if self.dtype.hasobject:
             # The array contained Python objects. We need to unpickle the data.
-            try:
-                array = pickle.load(unpickler.file_handle)
-            except UnicodeError as err:
-                if sys.version_info[0] >= 3:
-                    # Friendlier error message
-                    raise UnicodeError("Unpickling a python object failed: %r\n"
-                                       "You may need to pass the "
-                                       "encoding= option "
-                                       "to numpy.load" % (err,))
-                raise
+            array = pickle.load(unpickler.file_handle)
         else:
             if unpickler.np.compat.isfileobj(unpickler.file_handle):
                 # We can use the fast fromfile() function.
