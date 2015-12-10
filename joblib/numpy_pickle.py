@@ -16,7 +16,7 @@ from .numpy_pickle_utils import _ZFILE_PREFIX
 from .numpy_pickle_utils import Unpickler, Pickler
 from .numpy_pickle_utils import gzip_file_factory
 from .numpy_pickle_utils import _read_magic, _check_filetype
-from .numpy_pickle_utils import _open_memmap
+from .numpy_pickle_utils import _read_bytes, BUFFER_SIZE
 from .numpy_pickle_compat import load_compatibility, NDArrayWrapper
 from ._compat import _basestring
 
@@ -27,24 +27,144 @@ from ._compat import _basestring
 class NumpyArrayWrapper(object):
     """An object to be persisted instead of numpy arrays.
 
-    The only thing this object does, is to carry the filename in which
-    the array has been persisted, and the array subclass.
+    The only thing this object does, is to carry the information of the
+    persisted array: the subclass, shape, order, dtype of the array. Those
+    ndarray metadata are used to correctly reconstruct the array with numpy
+    functions.
+    It also contains a boolean for determining if memmap is allowed on the
+    array.
 
     Attributes
     ----------
     subclass: numpy.ndarray subclass
         Determine the subclass of the wrapped array.
+    shape: numpy.ndarray shape
+        Determine the shape of the wrapped array.
+    order: str
+        Determine the order of wrapped array data. Allowed values are 'F' for
+        fortran order and 'C' for C order.
+    dtype: numpy.ndarray dtype
+        Determine the data type of the wrapped array.
     allow_mmap: bool
         Determine if memory mapping is allowed on the wrapped array.
-    offset: int
-        Contains the offset in file where the wrapped array can be read.
+        Default: False.
     """
 
-    def __init__(self, subclass, dtype, allow_mmap=True):
+    def __init__(self, subclass, shape, order, dtype, allow_mmap=False):
         """Constructor. Store the useful information for later."""
         self.subclass = subclass
-        self.allow_mmap = allow_mmap
+        self.shape = shape
+        self.order = order
         self.dtype = dtype
+        self.allow_mmap = allow_mmap
+
+    def write_array(self, array, pickler):
+        """Write array bytes to pickler file handle.
+
+        This function is an adapation of the numpy write_array function
+        available in version 0.10 in numpy/lib/format.py.
+        """
+        # Set buffer size to 16 MiB to hide the Python loop overhead.
+        array = pickler.np.asanyarray(array)
+        buffersize = max(16 * 1024 ** 2 // array.itemsize, 1)
+
+        if array.dtype.hasobject:
+            # We contain Python objects so we cannot write out the data
+            # directly. Instead, we will pickle it out with version 2 of the
+            # pickle protocol.
+            pickle.dump(array, pickler.file, protocol=2)
+        elif self.order == 'F':
+            if pickler.np.compat.isfileobj(pickler.file):
+                array.T.tofile(pickler.file)
+            else:
+                for chunk in pickler.np.nditer(array, flags=['external_loop',
+                                                             'buffered',
+                                                             'zerosize_ok'],
+                                               buffersize=buffersize,
+                                               order='F'):
+                    pickler.file.write(chunk.tobytes('C'))
+        else:
+            if pickler.np.compat.isfileobj(pickler.file):
+                array.tofile(pickler.file)
+            else:
+                for chunk in pickler.np.nditer(array, flags=['external_loop',
+                                                             'buffered',
+                                                             'zerosize_ok'],
+                                               buffersize=buffersize,
+                                               order='C'):
+                    pickler.file.write(chunk.tobytes('C'))
+
+    def read_array(self, unpickler):
+        """Read array from unpickler file handle.
+
+        This function is an adapation of the numpy read_array function
+        available in version 0.10 in numpy/lib/format.py.
+        """
+        if len(self.shape) == 0:
+            count = 1
+        else:
+            count = unpickler.np.multiply.reduce(self.shape)
+        # Now read the actual data.
+        if self.dtype.hasobject:
+            # The array contained Python objects. We need to unpickle the data.
+            try:
+                array = pickle.load(unpickler.file_handle)
+            except UnicodeError as err:
+                if sys.version_info[0] >= 3:
+                    # Friendlier error message
+                    raise UnicodeError("Unpickling a python object failed: %r\n"
+                                       "You may need to pass the "
+                                       "encoding= option "
+                                       "to numpy.load" % (err,))
+                raise
+        else:
+            if unpickler.np.compat.isfileobj(unpickler.file_handle):
+                # We can use the fast fromfile() function.
+                array = unpickler.np.fromfile(unpickler.file_handle,
+                                              dtype=self.dtype, count=count)
+            else:
+                # This is not a real file. We have to read it the
+                # memory-intensive way.
+                # crc32 module fails on reads greater than 2 ** 32 bytes,
+                # breaking large reads from gzip streams. Chunk reads to
+                # BUFFER_SIZE bytes to avoid issue and reduce memory overhead
+                # of the read. In non-chunked case count < max_read_count, so
+                # only one read is performed.
+
+                max_read_count = BUFFER_SIZE // min(BUFFER_SIZE,
+                                                    self.dtype.itemsize)
+
+                array = unpickler.np.empty(count, dtype=self.dtype)
+                for i in range(0, count, max_read_count):
+                    read_count = min(max_read_count, count - i)
+                    read_size = int(read_count * self.dtype.itemsize)
+                    data = _read_bytes(unpickler.file_handle,
+                                       read_size, "array data")
+                    array[i:i+read_count] = \
+                        unpickler.np.frombuffer(data, dtype=self.dtype,
+                                                count=read_count)
+
+            if self.order == 'F':
+                array.shape = self.shape[::-1]
+                array = array.transpose()
+            else:
+                array.shape = self.shape
+
+        return array
+
+    def read_mmap(self, unpickler):
+        """Read an array using numpy memmap."""
+        offset = unpickler.file_handle.tell()
+        marray = unpickler.np.memmap(unpickler.filename,
+                                     dtype=self.dtype,
+                                     shape=self.shape,
+                                     order=self.order,
+                                     mode=unpickler.mmap_mode,
+                                     offset=offset)
+        # update the offset so that it corresponds to the end of the read array
+        unpickler.file_handle.seek(offset + marray.nbytes)
+
+        return marray
 
     def read(self, unpickler):
         """Read the array corresponging to this wrapper.
@@ -60,17 +180,11 @@ class NumpyArrayWrapper(object):
         array: numpy.ndarray or numpy.memmap or numpy.matrix
 
         """
-        # Now we read the array stored at current offset
-        # position in file handle
-        if (self.allow_mmap and
-                unpickler.mmap_mode is not None and
-                not self.dtype.hasobject):
-            array, next_offset = _open_memmap(unpickler.filename,
-                                              unpickler.file_handle.tell(),
-                                              mode=unpickler.mmap_mode)
-            unpickler.file_handle.seek(next_offset)
+        # When requested, only use memmap mode if allowed.
+        if unpickler.mmap_mode is not None and self.allow_mmap:
+            array = self.read_mmap(unpickler)
         else:
-            array = unpickler.np.lib.format.read_array(unpickler.file_handle)
+            array = self.read_array(unpickler)
 
         # Manage array subclass case
         if (hasattr(array, '__array_prepare__') and
@@ -129,9 +243,11 @@ class NumpyPickler(Pickler):
 
     def _create_array_wrapper(self, array):
         """Create and returns a numpy array wrapper from a numpy array."""
-        allow_mmap = not array.dtype.hasobject and not self.compress
+        order = 'F' if (array.flags.f_contiguous and
+                        not array.flags.c_contiguous) else 'C'
+        allow_mmap = not self.compress and not array.dtype.hasobject
         wrapper = NumpyArrayWrapper(type(array),
-                                    array.dtype,
+                                    array.shape, order, array.dtype,
                                     allow_mmap=allow_mmap)
 
         return wrapper
@@ -151,14 +267,14 @@ class NumpyPickler(Pickler):
                                                  self.np.memmap):
             if type(obj) is self.np.memmap:
                 # Pickling doesn't work with memmapped arrays
-                obj = self.np.asarray(obj)
-                return Pickler.save(self, obj)
+                obj = self.np.asanyarray(obj)
 
             # This converts on the fly the array in a wrapper
-            Pickler.save(self, self._create_array_wrapper(obj))
+            wrapper = self._create_array_wrapper(obj)
+            Pickler.save(self, wrapper)
 
             # Array is stored right after the wrapper
-            self.np.save(self.file, obj)
+            wrapper.write_array(obj, self)
             return
 
         return Pickler.save(self, obj)
