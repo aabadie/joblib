@@ -9,6 +9,7 @@ import sys
 import io
 
 PY3 = sys.version_info[0] >= 3
+PY34 = sys.version_info[0] >= 3 and sys.version_info[1] >= 4
 PY26 = sys.version_info[0] == 2 and sys.version_info[1] == 6
 
 if PY3:

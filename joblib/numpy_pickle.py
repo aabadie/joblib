@@ -11,7 +11,7 @@ import warnings
 
 from contextlib import closing
 
-from .numpy_pickle_utils import PY3
+from .numpy_pickle_utils import PY3, PY34
 from .numpy_pickle_utils import _ZFILE_PREFIX
 from .numpy_pickle_utils import Unpickler, Pickler
 from .numpy_pickle_utils import gzip_file_factory
@@ -77,22 +77,30 @@ class NumpyArrayWrapper(object):
             if pickler.np.compat.isfileobj(pickler.file):
                 array.T.tofile(pickler.file)
             else:
-                for chunk in pickler.np.nditer(array, flags=['external_loop',
-                                                             'buffered',
-                                                             'zerosize_ok'],
-                                               buffersize=buffersize,
-                                               order='F'):
-                    pickler.file.write(chunk.tobytes('C'))
+                if PY34:
+                    for chunk in pickler.np.nditer(array,
+                                                   flags=['external_loop',
+                                                          'buffered',
+                                                          'zerosize_ok'],
+                                                   buffersize=buffersize,
+                                                   order='F'):
+                        pickler.file.write(chunk.tobytes('C'))
+                else:
+                    pickler.file.write(array.T.tostring('C'))
         else:
             if pickler.np.compat.isfileobj(pickler.file):
                 array.tofile(pickler.file)
             else:
-                for chunk in pickler.np.nditer(array, flags=['external_loop',
-                                                             'buffered',
-                                                             'zerosize_ok'],
-                                               buffersize=buffersize,
-                                               order='C'):
-                    pickler.file.write(chunk.tobytes('C'))
+                if PY34:
+                    for chunk in pickler.np.nditer(array,
+                                                   flags=['external_loop',
+                                                          'buffered',
+                                                          'zerosize_ok'],
+                                                   buffersize=buffersize,
+                                                   order='C'):
+                        pickler.file.write(chunk.tobytes('C'))
+                else:
+                    pickler.file.write(array.tostring('C'))
 
     def read_array(self, unpickler):
         """Read array from unpickler file handle.
@@ -155,6 +163,9 @@ class NumpyArrayWrapper(object):
     def read_mmap(self, unpickler):
         """Read an array using numpy memmap."""
         offset = unpickler.file_handle.tell()
+        if unpickler.mmap_mode == 'w+':
+            unpickler.mmap_mode = 'r+'
+
         marray = unpickler.np.memmap(unpickler.filename,
                                      dtype=self.dtype,
                                      shape=self.shape,
