@@ -17,7 +17,8 @@ from .numpy_pickle_utils import Unpickler, Pickler
 from .numpy_pickle_utils import gzip_file_factory
 from .numpy_pickle_utils import _read_magic, _check_filetype
 from .numpy_pickle_utils import _read_bytes, BUFFER_SIZE
-from .numpy_pickle_compat import load_compatibility, NDArrayWrapper
+from .numpy_pickle_compat import load_compatibility
+from .numpy_pickle_compat import NDArrayWrapper, ZNDArrayWrapper
 from ._compat import _basestring
 
 ###############################################################################

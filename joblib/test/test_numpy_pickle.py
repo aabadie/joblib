@@ -456,8 +456,8 @@ def test_joblib_pickle_across_python_versions():
     # the joblib/test/data/create_numpy_pickle.py script for the
     # relevant python, joblib and numpy versions.
     test_data_dir = os.path.dirname(os.path.abspath(data.__file__))
-    data_filenames = glob.glob(os.path.join(test_data_dir, '*.gz'))
-    data_filenames += glob.glob(os.path.join(test_data_dir, '*.pkl'))
+    data_filenames = glob.glob(os.path.join(test_data_dir, 'joblib_*.gz'))
+    data_filenames += glob.glob(os.path.join(test_data_dir, 'joblib_*.pkl'))
 
     for fname in data_filenames:
         _check_pickle(fname, expected_list)

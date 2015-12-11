@@ -16,7 +16,7 @@ from joblib.test.common import np, with_numpy
 
 # numpy_pickle is not a drop-in replacement of pickle, as it takes
 # filenames instead of open files as arguments.
-from joblib import numpy_pickle_compat, numpy_pickle_utils
+from joblib import numpy_pickle, numpy_pickle_compat, numpy_pickle_utils
 from joblib.test import data
 
 
@@ -52,3 +52,20 @@ def test_z_file():
     with open(filename, 'rb') as f:
         data_read = numpy_pickle_compat.read_zfile(f)
     nose.tools.assert_equal(data, data_read)
+
+
+@with_numpy
+def test_load_compatibility_function():
+    """Test load compatibility function."""
+    obj = [np.ones((10, 10)), np.matrix([0, 1, 2])]
+
+    test_data_dir = os.path.dirname(os.path.abspath(data.__file__))
+    data_filenames = glob.glob(os.path.join(test_data_dir, 'test_*.gz'))
+    data_filenames += glob.glob(os.path.join(test_data_dir, 'test_*.pkl'))
+
+    for filename in data_filenames:
+        obj_read = numpy_pickle.load(filename)
+        nose.tools.assert_equal(len(obj_read), 2)
+
+        np.testing.assert_array_equal(obj[0], obj_read[0])
+        np.testing.assert_array_equal(obj[1], obj_read[1])

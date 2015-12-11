@@ -80,8 +80,6 @@ class NDArrayWrapper(object):
         """Reconstruct the array."""
         filename = os.path.join(unpickler._dirname, self.filename)
         # Load the array from the disk
-        np_ver = [int(x) for x in unpickler.np.__version__.split('.', 2)[:2]]
-
         # use getattr instead of self.allow_mmap to ensure backward compat
         # with NDArrayWrapper instances pickled with joblib < 0.9.0
         allow_mmap = getattr(self, 'allow_mmap', True)
