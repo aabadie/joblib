@@ -1,17 +1,15 @@
 """Test the old numpy pickler, compatibility version."""
 
-from tempfile import mkdtemp
-import copy
 import shutil
 import os
 import random
 import sys
-import re
 import tempfile
 import glob
-
 import nose
 
+from tempfile import mkdtemp
+from nose import SkipTest
 from joblib.test.common import np, with_numpy
 
 # numpy_pickle is not a drop-in replacement of pickle, as it takes
@@ -64,8 +62,13 @@ def test_load_compatibility_function():
     data_filenames += glob.glob(os.path.join(test_data_dir, 'test_*.pkl'))
 
     for filename in data_filenames:
-        obj_read = numpy_pickle.load(filename)
-        nose.tools.assert_equal(len(obj_read), 2)
+        try:
+            obj_read = numpy_pickle.load(filename)
+        except ValueError:
+            raise SkipTest("Skipped as this version of python (%s), doesn't "
+                           "support the required pickle format.")
+        else:
+            nose.tools.assert_equal(len(obj_read), 2)
 
-        np.testing.assert_array_equal(obj[0], obj_read[0])
-        np.testing.assert_array_equal(obj[1], obj_read[1])
+            np.testing.assert_array_equal(obj[0], obj_read[0])
+            np.testing.assert_array_equal(obj[1], obj_read[1])

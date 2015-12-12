@@ -196,10 +196,9 @@ class NumpyArrayWrapper(object):
             # We need to reconstruct another subclass
             new_array = unpickler.np.core.multiarray._reconstruct(
                                     self.subclass, (0,), 'b')
-            new_array.__array_prepare__(array)
-            array = new_array
-
-        return array
+            return new_array.__array_prepare__(array)
+        else:
+            return array
 
 ###############################################################################
 # Pickler classes

@@ -196,6 +196,7 @@ def test_numpy_persistence():
                     hasattr(obj, '__array_prepare__')):
                 # We don't reconstruct memmaps
                 nose.tools.assert_true(isinstance(obj_, type(obj)))
+                np.testing.assert_array_equal(obj_, obj)
 
         # Test with an object containing multiple numpy arrays
         obj = ComplexTestObject()
