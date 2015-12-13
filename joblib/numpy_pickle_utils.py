@@ -25,21 +25,18 @@ def hex_str(an_int):
     """Convert an int to an hexadecimal string."""
     return '{0:#x}'.format(an_int)
 
+if PY3:
+    def asbytes(s):
+        if isinstance(s, bytes):
+            return s
+        return s.encode('latin1')
+else:
+    asbytes = str
+
 try:
     import numpy as np
-    from numpy.compat import asbytes
 except ImportError:
-    if PY3:
-        def asbytes(s):
-            if isinstance(s, bytes):
-                return s
-            return s.encode('latin1')
-    else:
-        asbytes = str
-
     np = None
-
-_MEGA = 2 ** 20
 
 # Compressed pickle header format: _ZFILE_PREFIX followed by
 # bytes which contains the length of the zlib compressed data as an
@@ -157,52 +154,47 @@ def _check_filetype(filename, magic):
     return open(filename, 'rb')
 
 
-# Import utility functions/variables from numpy required for writing arrays.
-# We need at least the functions introduced in version 1.9 of numpy.
-if (np is not None and (int(np.version.version.split('.')[0]) > 1 or
-                           (int(np.version.version.split('.')[0]) == 1 and
-                            int(np.version.version.split('.')[1]) == 9))):
-    from numpy.lib.format import BUFFER_SIZE
-    from numpy.lib.format import _read_bytes
-else:
-    # For older versions of numpy, we use the ones from numpy 1.10.
-    BUFFER_SIZE = 2**18  # size of buffer for reading npz files in bytes
+# Utility functions/variables from numpy required for writing arrays.
+# We need at least the functions introduced in version 1.9 of numpy. Here,
+# we use the ones from numpy 1.10.
+BUFFER_SIZE = 2**18  # size of buffer for reading npz files in bytes
 
-    def _read_bytes(fp, size, error_template="ran out of data"):
-        """Read from file-like object until size bytes are read.
 
-        Raises ValueError if not EOF is encountered before size bytes are read.
-        Non-blocking objects only supported if they derive from io objects.
+def _read_bytes(fp, size, error_template="ran out of data"):
+    """Read from file-like object until size bytes are read.
 
-        Required as e.g. ZipExtFile in python 2.6 can return less data than
-        requested.
+    Raises ValueError if not EOF is encountered before size bytes are read.
+    Non-blocking objects only supported if they derive from io objects.
 
-        Parameters
-        ----------
-        fp: file-like object
-        size: int
-        error_template: str
+    Required as e.g. ZipExtFile in python 2.6 can return less data than
+    requested.
 
-        Returns
-        -------
-        a bytes object
-            The data read in bytes.
+    Parameters
+    ----------
+    fp: file-like object
+    size: int
+    error_template: str
 
-        """
-        data = bytes()
-        while True:
-            # io files (default in python3) return None or raise on
-            # would-block, python2 file will truncate, probably nothing can be
-            # done about that.  note that regular files can't be non-blocking
-            try:
-                r = fp.read(size - len(data))
-                data += r
-                if len(r) == 0 or len(data) == size:
-                    break
-            except io.BlockingIOError:
-                pass
-        if len(data) != size:
-            msg = "EOF: reading %s, expected %d bytes got %d"
-            raise ValueError(msg % (error_template, size, len(data)))
-        else:
-            return data
+    Returns
+    -------
+    a bytes object
+        The data read in bytes.
+
+    """
+    data = bytes()
+    while True:
+        # io files (default in python3) return None or raise on
+        # would-block, python2 file will truncate, probably nothing can be
+        # done about that.  note that regular files can't be non-blocking
+        try:
+            r = fp.read(size - len(data))
+            data += r
+            if len(r) == 0 or len(data) == size:
+                break
+        except io.BlockingIOError:
+            pass
+    if len(data) != size:
+        msg = "EOF: reading %s, expected %d bytes got %d"
+        raise ValueError(msg % (error_template, size, len(data)))
+    else:
+        return data
