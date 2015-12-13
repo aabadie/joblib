@@ -11,7 +11,7 @@ import warnings
 
 from contextlib import closing
 
-from .numpy_pickle_utils import PY3, PY34
+from .numpy_pickle_utils import PY3
 from .numpy_pickle_utils import _ZFILE_PREFIX
 from .numpy_pickle_utils import Unpickler, Pickler
 from .numpy_pickle_utils import gzip_file_factory
@@ -64,10 +64,12 @@ class NumpyArrayWrapper(object):
 
         This function is an adapation of the numpy write_array function
         available in version 0.10 in numpy/lib/format.py.
+        We added some code to support versions of numpy prior to 1.9.
         """
         # Set buffer size to 16 MiB to hide the Python loop overhead.
         array = pickler.np.asanyarray(array)
         buffersize = max(16 * 1024 ** 2 // array.itemsize, 1)
+        np_ver = [int(x) for x in pickler.np.__version__.split('.', 2)[:2]]
 
         if array.dtype.hasobject:
             # We contain Python objects so we cannot write out the data
@@ -78,7 +80,8 @@ class NumpyArrayWrapper(object):
             if pickler.np.compat.isfileobj(pickler.file):
                 array.T.tofile(pickler.file)
             else:
-                if PY34:
+                # 'tobytes' is available since numpy 1.9.
+                if np_ver[0] >= 1 and np_ver[1] >= 9:
                     for chunk in pickler.np.nditer(array,
                                                    flags=['external_loop',
                                                           'buffered',
@@ -92,7 +95,8 @@ class NumpyArrayWrapper(object):
             if pickler.np.compat.isfileobj(pickler.file):
                 array.tofile(pickler.file)
             else:
-                if PY34:
+                # 'tobytes' is available since numpy 1.9.
+                if np_ver[0] >= 1 and np_ver[1] >= 9:
                     for chunk in pickler.np.nditer(array,
                                                    flags=['external_loop',
                                                           'buffered',
