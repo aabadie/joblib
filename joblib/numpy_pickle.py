@@ -28,12 +28,15 @@ from ._compat import _basestring
 class NumpyArrayWrapper(object):
     """An object to be persisted instead of numpy arrays.
 
-    The only thing this object does, is to carry the information of the
-    persisted array: the subclass, shape, order, dtype of the array. Those
+    This object is in charge of:
+    * carrying the information of the persisted array:
+    the subclass, shape, order, dtype of the array. Those
     ndarray metadata are used to correctly reconstruct the array with numpy
     functions.
-    It also contains a boolean for determining if memmap is allowed on the
-    array.
+    * determining if memmap is allowed on the array.
+    * reading the array bytes from a file.
+    * reading the array using memorymap from a file.
+    * writing the array bytes to a file.
 
     Attributes
     ----------
