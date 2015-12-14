@@ -76,7 +76,7 @@ if [ -z "$NUMPY_VERSION" ]; then
 fi
 
 if [[ "$COVERAGE" == "true" ]]; then
-    pip install coverage coveralls memory_profiler
+    pip install coverage coveralls
 fi
 
 python setup.py install
