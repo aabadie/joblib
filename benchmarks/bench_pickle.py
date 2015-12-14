@@ -64,7 +64,12 @@ def memory_used(func, *args, **kwargs):
 def timeit(func, *args, **kwargs):
     """Compute the mean execution time of func based on 7 measures."""
     times = list()
-    for _ in range(7):
+    tries = kwargs['tries']
+    kwargs.pop('tries')
+    if tries > 1:
+        tries += 2
+
+    for _ in range(tries):
         kill_disk_cache()
         t0 = time.time()
         out = func(*args, **kwargs)
@@ -82,7 +87,7 @@ def timeit(func, *args, **kwargs):
             t2 = time.time()
             times.append(t2 - t0 - 2*(t2 - t1))
     times.sort()
-    return np.mean(times[1:-1]), out
+    return np.mean(times[1:-1]) if tries > 1 else t1 - t0, out
 
 
 def generate_rand_dict(size):
@@ -106,8 +111,47 @@ def print_line(dataset, strategy,
             mem_write, mem_read, disk_used))
 
 
+def print_bench_summary(args):
+    """Nice bench summary function."""
+    summary = """Benchmark summary:
+    - Global values:
+        . Number of tries to compute mean execution time: {0}
+        . Compression levels   : {1}
+        . Memory map mode      : {2}
+        . Bench nifti data     : {3}
+        . Bench big array      : {4}
+        . Bench 2 big arrays   : {5}
+        . Bench big dictionnary: {6}
+        . Bench array+dict     : {7}
+""".format(args.tries,
+           ", ".join(map(str, args.compress)),
+           args.mmap,
+           args.nifti,
+           args.array,
+           args.arrays,
+           args.dict,
+           args.combo)
+
+    if args.array:
+        shape = tuple(args.shape)
+        size = round(np.multiply.reduce(shape) * 8 / 1024**2, 1)
+        summary += """
+    - Big array:
+        . shape: {0}
+        . size in memory: {1} MB
+""".format(str(shape), size)
+
+    if args.dict:
+        summary += """
+    - Big dictionnary:
+        . number of keys: {0}
+""".format(args.size)
+
+    print(summary)
+
+
 def bench_compress(dataset, name='',
-                   compress=None, cache_size=0):
+                   compress=None, cache_size=0, tries=5):
     """Bench joblib dump and load functions, compress modes."""
     time_write = list()
     time_read = list()
@@ -116,6 +160,7 @@ def bench_compress(dataset, name='',
     mem_write = list()
     clear_out()
     time_write, _ = timeit(joblib.dump, dataset, 'out/test.pkl',
+                           tries=tries,
                            compress=compress, cache_size=cache_size)
     mem_write = memory_used(joblib.dump, dataset, 'out/test.pkl',
                             compress=compress, cache_size=cache_size)
@@ -123,27 +168,30 @@ def bench_compress(dataset, name='',
     delete_obj(dataset)
 
     du = disk_used('out')/1024.
-    time_read, obj = timeit(joblib.load, 'out/test.pkl')
+    time_read, obj = timeit(joblib.load, 'out/test.pkl', tries=tries)
     delete_obj(obj)
     mem_read = memory_used(joblib.load, 'out/test.pkl')
     print_line(name, 'compress %i' % compress,
                time_write, time_read, mem_write, mem_read, du)
 
 
-def bench_mmap(dataset, name='', cache_size=0, mmap_mode='r'):
+def bench_mmap(dataset, name='', cache_size=0, mmap_mode='r', tries=5):
     """Bench joblib dump and load functions, memmap modes."""
     time_write = list()
     time_read = list()
     du = list()
     clear_out()
     time_write, _ = timeit(joblib.dump, dataset, 'out/test.pkl',
+                           tries=tries,
                            cache_size=cache_size)
     mem_write = memory_used(joblib.dump, dataset, 'out/test.pkl',
                             cache_size=cache_size)
 
     delete_obj(dataset)
 
-    time_read, obj = timeit(joblib.load, 'out/test.pkl', mmap_mode=mmap_mode)
+    time_read, obj = timeit(joblib.load, 'out/test.pkl',
+                            tries=tries,
+                            mmap_mode=mmap_mode)
     delete_obj(obj)
     mem_read = memory_used(joblib.load, 'out/test.pkl', mmap_mode=mmap_mode)
     du = disk_used('out')/1024.
@@ -158,16 +206,18 @@ def run_bench(func, obj, name, **kwargs):
 
 def run(args):
     """Run the full bench suite."""
-    print('% 15s, %12s, % 6s, % 7s, % 9s, % 9s, % 5s' % (
-            'Dataset', 'strategy', 'write', 'read',
-            'mem_write', 'mem_read', 'disk'))
+    print_bench_summary(args)
 
     compress_levels = args.compress
     mmap_mode = args.mmap
 
-    dict_size = 10000
-    a1_shape = (5000, 5000)
+    dict_size = args.size
+    a1_shape = tuple(args.shape)
     a2_shape = (10000000, )
+
+    print('% 15s, %12s, % 6s, % 7s, % 9s, % 9s, % 5s' % (
+            'Dataset', 'strategy', 'write', 'read',
+            'mem_write', 'mem_read', 'disk'))
 
     if args.nifti:
         # Nifti images
@@ -197,7 +247,7 @@ def run(args):
                             d = (np.ascontiguousarray(d[0]), d[1])
 
                         run_bench(bench_compress, d, name_d,
-                                  compress=compress)
+                                  compress=compress, tries=args.tries)
                         del d
 
                     d = load_nii(nifti_file)
@@ -205,7 +255,7 @@ def run(args):
                         d = (np.ascontiguousarray(d[0]), d[1])
 
                     run_bench(bench_mmap, d, name_d,
-                              mmap_mode=mmap_mode)
+                              mmap_mode=mmap_mode, tries=args.tries)
                     del d
 
     # Generate random seed
@@ -217,11 +267,11 @@ def run(args):
         for compress in compress_levels:
             a1 = rnd.random_sample(a1_shape)
             run_bench(bench_compress, a1, name,
-                      compress=compress)
+                      compress=compress, tries=args.tries)
             del a1
 
         a1 = rnd.random_sample(a1_shape)
-        run_bench(bench_mmap, a1, name, mmap_mode=mmap_mode)
+        run_bench(bench_mmap, a1, name, mmap_mode=mmap_mode, tries=args.tries)
         del a1
 
     if args.arrays:
@@ -229,11 +279,12 @@ def run(args):
         name = '% 5s' % '2 big arrays'
         for compress in compress_levels:
             obj = [rnd.random_sample(a1_shape), rnd.random_sample(a2_shape)]
-            run_bench(bench_compress, obj, name, compress=compress)
+            run_bench(bench_compress, obj, name, compress=compress,
+                      tries=args.tries)
             del obj
 
         obj = [rnd.random_sample(a1_shape), rnd.random_sample(a2_shape)]
-        run_bench(bench_mmap, obj, name, mmap_mode=mmap_mode)
+        run_bench(bench_mmap, obj, name, mmap_mode=mmap_mode, tries=args.tries)
         del obj
 
     if args.dict:
@@ -242,10 +293,11 @@ def run(args):
         for compress in compress_levels:
             big_dict = generate_rand_dict(dict_size)
             run_bench(bench_compress, big_dict, name,
-                      compress=compress)
+                      compress=compress, tries=args.tries)
             del big_dict
         big_dict = generate_rand_dict(dict_size)
-        run_bench(bench_mmap, big_dict, name, mmap_mode=mmap_mode)
+        run_bench(bench_mmap, big_dict, name, mmap_mode=mmap_mode,
+                  tries=args.tries)
         del big_dict
 
     if args.combo:
@@ -255,20 +307,31 @@ def run(args):
             obj = [rnd.random_sample(a1_shape),
                    generate_rand_dict(dict_size),
                    rnd.random_sample(a2_shape)]
-            run_bench(bench_compress, obj, name, compress=compress)
+            run_bench(bench_compress, obj, name, compress=compress,
+                      tries=args.tries)
             del obj
 
         obj = [rnd.random_sample(a1_shape),
                generate_rand_dict(dict_size),
                rnd.random_sample(a2_shape)]
-        run_bench(bench_mmap, obj, name, mmap_mode=mmap_mode)
+        run_bench(bench_mmap, obj, name, mmap_mode=mmap_mode, tries=args.tries)
         del obj
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Joblib benchmark script")
-    parser.add_argument('--compress', nargs='+', type=int, default=(0, 3))
-    parser.add_argument('--mmap', type=str, default='r')
+    parser.add_argument('--compress', nargs='+', type=int, default=(0, 3),
+                        help="List of compress levels.")
+    parser.add_argument('--mmap', type=str, default='r',
+                        choices=['r', 'r+', 'w+'],
+                        help="Memory map mode.")
+    parser.add_argument('--tries', type=int, default=5,
+                        help="Number of tries to compute execution time"
+                             "mean on.")
+    parser.add_argument('--shape', nargs='+', type=int, default=(10000, 10000),
+                        help="Big array shape.")
+    parser.add_argument('--size', type=int, default=10000,
+                        help="Big dictionnary size.")
     parser.add_argument("-n", "--nifti", action="store_true",
                         help="Benchmark Nifti data")
     parser.add_argument("-a", "--array", action="store_true",
