@@ -30,14 +30,37 @@ def get_joblib_version(joblib_version=joblib.__version__):
     return '.'.join([m.group(1) for m in matches if m is not None])
 
 
+def get_joblib_version_as_tuple(joblib_version=joblib.__version__):
+    """Return normalised joblib version as a tuple.
+
+    >>> get_joblib_version_as_tuple('0.8.4')
+    (0, 8, 4)
+    >>> get_joblib_version_as_tuple('0.8.4b1')
+    (0, 8, 4)
+    >>> get_joblib_version_as_tuple('0.9.dev0')
+    (0, 9)
+
+    """
+    return tuple(map(int, get_joblib_version(joblib_version)))
+
+
 def write_test_pickle(to_pickle):
     joblib_version = get_joblib_version()
     py_version = '{0[0]}{0[1]}'.format(sys.version_info)
     numpy_version = ''.join(np.__version__.split('.')[:2])
     print('file:', np.__file__)
+
     pickle_filename = 'joblib_{0}_compressed_pickle_py{1}_np{2}.gz'.format(
         joblib_version, py_version, numpy_version)
     joblib.dump(to_pickle, pickle_filename, compress=True)
+
+    if (get_joblib_version_as_tuple() < (0, 10) and
+            get_joblib_version_as_tuple() >= (0, 9, 3)):
+        # Pickle compressed arrays using numpy functions in external files.
+        pickle_np_fname = 'joblib_{0}_compressed_pickle_np_py{1}_np{2}.gz'.\
+            format(joblib_version, py_version, numpy_version)
+        joblib.dump(to_pickle, pickle_np_fname, compress=True, cache_size=0)
+
     pickle_filename = 'joblib_{0}_pickle_py{1}_np{2}.pkl'.format(
         joblib_version, py_version, numpy_version)
     joblib.dump(to_pickle, pickle_filename, compress=False)
@@ -55,6 +78,10 @@ if __name__ == '__main__':
                  # compatibility alias for .tobytes which was
                  # added in 1.9.0
                  np.arange(256, dtype=np.uint8).tostring(),
+                 # np.matrix is a subclass of nd.array, here we want
+                 # to verify this type of object is correctly unpickled
+                 # among versions.
+                 np.matrix([0, 1, 2]),
                  # unicode string with non-ascii chars
                  u"C'est l'\xe9t\xe9 !"]
 

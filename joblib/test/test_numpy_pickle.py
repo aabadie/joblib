@@ -339,39 +339,6 @@ def test_cache_size_warning():
 
 
 @with_numpy
-def test_compressed_pickle_dump_and_load():
-    # XXX: temporarily disable this test on non little-endian machines
-    if sys.byteorder != 'little':
-        raise nose.SkipTest('Skipping this test on non little-endian machines')
-
-    expected_list = [np.arange(5, dtype=np.dtype('<i8')),
-                     np.arange(5, dtype=np.dtype('<f8')),
-                     np.array([1, 'abc', {'a': 1, 'b': 2}], dtype='O'),
-                     # .tostring actually returns bytes and is a
-                     # compatibility alias for .tobytes which was
-                     # added in 1.9.0
-                     np.arange(256, dtype=np.uint8).tostring(),
-                     u"C'est l'\xe9t\xe9 !"]
-
-    with tempfile.NamedTemporaryFile(suffix='.gz', dir=env['dir']) as f:
-        fname = f.name
-
-    # Need to test both code branches (whether array size is greater
-    # or smaller than cache_size)
-    try:
-        dumped_filenames = numpy_pickle.dump(expected_list, fname, compress=1)
-        result_list = numpy_pickle.load(fname)
-        for result, expected in zip(result_list, expected_list):
-            if isinstance(expected, np.ndarray):
-                nose.tools.assert_equal(result.dtype, expected.dtype)
-                np.testing.assert_equal(result, expected)
-            else:
-                nose.tools.assert_equal(result, expected)
-    finally:
-        os.remove(fname)
-
-
-@with_numpy
 @with_memory_usage
 def test_memory_usage():
     """Verify memory stays within expected bounds."""
@@ -397,6 +364,43 @@ def test_memory_usage():
             nose.tools.assert_true(mem_used < size)
 
 
+@with_numpy
+def test_compressed_pickle_dump_and_load():
+    # XXX: temporarily disable this test on non little-endian machines
+    if sys.byteorder != 'little':
+        raise nose.SkipTest('Skipping this test on non little-endian machines')
+
+    expected_list = [np.arange(5, dtype=np.dtype('<i8')),
+                     np.arange(5, dtype=np.dtype('<f8')),
+                     np.array([1, 'abc', {'a': 1, 'b': 2}], dtype='O'),
+                     # .tostring actually returns bytes and is a
+                     # compatibility alias for .tobytes which was
+                     # added in 1.9.0
+                     np.arange(256, dtype=np.uint8).tostring(),
+                     # np.matrix is a subclass of nd.array, here we want
+                     # to verify this type of object is correctly unpickled
+                     # among versions.
+                     np.matrix([0, 1, 2]),
+                     u"C'est l'\xe9t\xe9 !"]
+
+    with tempfile.NamedTemporaryFile(suffix='.gz', dir=env['dir']) as f:
+        fname = f.name
+
+    # Need to test both code branches (whether array size is greater
+    # or smaller than cache_size)
+    try:
+        dumped_filenames = numpy_pickle.dump(expected_list, fname, compress=1)
+        result_list = numpy_pickle.load(fname)
+        for result, expected in zip(result_list, expected_list):
+            if isinstance(expected, np.ndarray):
+                nose.tools.assert_equal(result.dtype, expected.dtype)
+                np.testing.assert_equal(result, expected)
+            else:
+                nose.tools.assert_equal(result, expected)
+    finally:
+        os.remove(fname)
+
+
 def _check_pickle(filename, expected_list):
     """Helper function to test joblib pickle content.
 
@@ -418,7 +422,7 @@ def _check_pickle(filename, expected_list):
                 warnings.simplefilter("always")
                 result_list = numpy_pickle.load(filename)
                 nose.tools.assert_equal(len(catched_warnings),
-                                        1 if ("0.9.2" in filename or
+                                        1 if ("0.9" in filename or
                                               "0.8.4" in filename) else 0)
             for warn in catched_warnings:
                 nose.tools.assert_equal(warn.category, DeprecationWarning)
@@ -474,6 +478,10 @@ def test_joblib_pickle_across_python_versions():
                      # compatibility alias for .tobytes which was
                      # added in 1.9.0
                      np.arange(256, dtype=np.uint8).tostring(),
+                     # np.matrix is a subclass of nd.array, here we want
+                     # to verify this type of object is correctly unpickled
+                     # among versions.
+                     np.matrix([0, 1, 2]),
                      u"C'est l'\xe9t\xe9 !"]
 
     # Testing all the *.gz and *.pkl (compressed and non compressed
