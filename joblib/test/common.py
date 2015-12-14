@@ -46,6 +46,10 @@ except ImportError:
         def dummy_func():
             raise nose.SkipTest('Test requires memory_profiler.')
         return dummy_func
+
+    def memory_used(func, *args, **kwargs):
+        """Return an invalid value."""
+        return -1
     memory_usage = None
 
 # A utility to kill the test runner in case a multiprocessing assumption
