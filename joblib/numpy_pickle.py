@@ -71,10 +71,6 @@ class NumpyArrayWrapper(object):
         """
         # Set buffer size to 16 MiB to hide the Python loop overhead.
         buffersize = max(16 * 1024 ** 2 // array.itemsize, 1)
-        numpy_version = tuple(
-                            [int(x)
-                             for x in pickler.np.__version__.split('.', 2)[:2]])
-
         if array.dtype.hasobject:
             # We contain Python objects so we cannot write out the data
             # directly. Instead, we will pickle it out with version 2 of the
@@ -84,32 +80,24 @@ class NumpyArrayWrapper(object):
             if pickler.np.compat.isfileobj(pickler.file):
                 array.T.tofile(pickler.file)
             else:
-                # 'tobytes' is available since numpy 1.9.
-                if numpy_version >= (1, 9):
-                    for chunk in pickler.np.nditer(array,
-                                                   flags=['external_loop',
-                                                          'buffered',
-                                                          'zerosize_ok'],
-                                                   buffersize=buffersize,
-                                                   order='F'):
-                        pickler.file.write(chunk.tobytes('C'))
-                else:
-                    pickler.file.write(array.T.tostring('C'))
+                for chunk in pickler.np.nditer(array,
+                                               flags=['external_loop',
+                                                      'buffered',
+                                                      'zerosize_ok'],
+                                               buffersize=buffersize,
+                                               order='F'):
+                    pickler.file.write(chunk.tostring('C'))
         else:
             if pickler.np.compat.isfileobj(pickler.file):
                 array.tofile(pickler.file)
             else:
-                # 'tobytes' is available since numpy 1.9.
-                if numpy_version >= (1, 9):
-                    for chunk in pickler.np.nditer(array,
-                                                   flags=['external_loop',
-                                                          'buffered',
-                                                          'zerosize_ok'],
-                                                   buffersize=buffersize,
-                                                   order='C'):
-                        pickler.file.write(chunk.tobytes('C'))
-                else:
-                    pickler.file.write(array.tostring('C'))
+                for chunk in pickler.np.nditer(array,
+                                               flags=['external_loop',
+                                                      'buffered',
+                                                      'zerosize_ok'],
+                                               buffersize=buffersize,
+                                               order='C'):
+                    pickler.file.write(chunk.tostring('C'))
 
     def read_array(self, unpickler):
         """Read array from unpickler file handle.
