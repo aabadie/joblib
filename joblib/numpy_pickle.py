@@ -65,13 +65,15 @@ class NumpyArrayWrapper(object):
     def write_array(self, array, pickler):
         """Write array bytes to pickler file handle.
 
-        This function is an adapation of the numpy write_array function
+        This function is an adaptation of the numpy write_array function
         available in version 0.10 in numpy/lib/format.py.
         We added some code to support versions of numpy prior to 1.9.
         """
         # Set buffer size to 16 MiB to hide the Python loop overhead.
         buffersize = max(16 * 1024 ** 2 // array.itemsize, 1)
-        np_ver = [int(x) for x in pickler.np.__version__.split('.', 2)[:2]]
+        numpy_version = tuple(
+                            [int(x)
+                             for x in pickler.np.__version__.split('.', 2)[:2]])
 
         if array.dtype.hasobject:
             # We contain Python objects so we cannot write out the data
@@ -83,7 +85,7 @@ class NumpyArrayWrapper(object):
                 array.T.tofile(pickler.file)
             else:
                 # 'tobytes' is available since numpy 1.9.
-                if np_ver[0] >= 1 and np_ver[1] >= 9:
+                if numpy_version >= (1, 9):
                     for chunk in pickler.np.nditer(array,
                                                    flags=['external_loop',
                                                           'buffered',
@@ -98,7 +100,7 @@ class NumpyArrayWrapper(object):
                 array.tofile(pickler.file)
             else:
                 # 'tobytes' is available since numpy 1.9.
-                if np_ver[0] >= 1 and np_ver[1] >= 9:
+                if numpy_version >= (1, 9):
                     for chunk in pickler.np.nditer(array,
                                                    flags=['external_loop',
                                                           'buffered',
@@ -112,7 +114,7 @@ class NumpyArrayWrapper(object):
     def read_array(self, unpickler):
         """Read array from unpickler file handle.
 
-        This function is an adapation of the numpy read_array function
+        This function is an adaptation of the numpy read_array function
         available in version 0.10 in numpy/lib/format.py.
         """
         if len(self.shape) == 0:

@@ -358,20 +358,17 @@ def test_compressed_pickle_dump_and_load():
 
     # Need to test both code branches (whether array size is greater
     # or smaller than cache_size)
-    for cache_size in [0, 1e9]:
-        try:
-            dumped_filenames = numpy_pickle.dump(expected_list,
-                                                 fname, compress=1,
-                                                 cache_size=cache_size)
-            result_list = numpy_pickle.load(fname)
-            for result, expected in zip(result_list, expected_list):
-                if isinstance(expected, np.ndarray):
-                    nose.tools.assert_equal(result.dtype, expected.dtype)
-                    np.testing.assert_equal(result, expected)
-                else:
-                    nose.tools.assert_equal(result, expected)
-        finally:
-            os.remove(fname)
+    try:
+        dumped_filenames = numpy_pickle.dump(expected_list, fname, compress=1)
+        result_list = numpy_pickle.load(fname)
+        for result, expected in zip(result_list, expected_list):
+            if isinstance(expected, np.ndarray):
+                nose.tools.assert_equal(result.dtype, expected.dtype)
+                np.testing.assert_equal(result, expected)
+            else:
+                nose.tools.assert_equal(result, expected)
+    finally:
+        os.remove(fname)
 
 
 @with_numpy
@@ -390,15 +387,13 @@ def test_memory_usage():
             mem_used = memory_used(numpy_pickle.dump,
                                    obj, obj_filename, compress=compress)
 
-            # The memory used to dump the object shouldn't exceed 10% of the
-            # size of the object itself
-            buffersize = 8 * max(16 * 1024 ** 2 // obj.itemsize, 1) / 1e6
+            # The memory used to dump the object shouldn't exceed the buffer
+            # size used to write array chunks (16MB).
+            buffersize = 16 * 1024 ** 2 / 1e6
             nose.tools.assert_true(mem_used <= buffersize)
 
             mem_used = memory_used(numpy_pickle.load, obj_filename)
-
-            print("TEST:", type(obj), mem_used, size)
-            # There are some buffer effect
+            # memory used should be less than array size.
             nose.tools.assert_true(mem_used < size)
 
 
@@ -419,13 +414,13 @@ def _check_pickle(filename, expected_list):
         py_version_used_for_writing, 4)
     if pickle_reading_protocol >= pickle_writing_protocol:
         try:
-            with warnings.catch_warnings(record=True) as w:
+            with warnings.catch_warnings(record=True) as catched_warnings:
                 warnings.simplefilter("always")
                 result_list = numpy_pickle.load(filename)
-                nose.tools.assert_equal(len(w),
+                nose.tools.assert_equal(len(catched_warnings),
                                         1 if ("0.9.2" in filename or
                                               "0.8.4" in filename) else 0)
-            for warn in w:
+            for warn in catched_warnings:
                 nose.tools.assert_equal(warn.category, DeprecationWarning)
                 nose.tools.assert_equal(warn.message.args[0],
                                         "The file '%s' has been generated with "
@@ -507,10 +502,9 @@ if np is not None:
         return d
 
     class ComplexTestObject:
-        """A complex object containing multiple np array memebers."""
+        """A complex object containing numpy arrays as attributes."""
 
         def __init__(self):
-            """Initialize different types of arrays."""
             self.array_float = np.arange(100, dtype='float64')
             self.array_int = np.ones(100, dtype='int32')
             self.array_obj = np.array(['a', 10, 20.0], dtype='object')
@@ -523,3 +517,4 @@ def test_numpy_subclass():
     numpy_pickle.dump(a, filename)
     c = numpy_pickle.load(filename)
     nose.tools.assert_true(isinstance(c, SubArray))
+    np.testing.assert_array_equal(c, a)
