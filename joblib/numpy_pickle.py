@@ -70,7 +70,6 @@ class NumpyArrayWrapper(object):
         We added some code to support versions of numpy prior to 1.9.
         """
         # Set buffer size to 16 MiB to hide the Python loop overhead.
-        array = pickler.np.asanyarray(array)
         buffersize = max(16 * 1024 ** 2 // array.itemsize, 1)
         np_ver = [int(x) for x in pickler.np.__version__.split('.', 2)[:2]]
 
@@ -125,8 +124,12 @@ class NumpyArrayWrapper(object):
             # The array contained Python objects. We need to unpickle the data.
             array = pickle.load(unpickler.file_handle)
         else:
-            if unpickler.np.compat.isfileobj(unpickler.file_handle):
-                # We can use the fast fromfile() function.
+            if (unpickler.np.compat.isfileobj(unpickler.file_handle) and
+                    count*self.dtype.itemsize/1e6 > 700):
+                # For very big arrays (> 700MB) and file objects,
+                # use np.fromfile function. This function is fast but do memory
+                # copies for smaller arrays so, in this case, we prefer the
+                # memory intensive way.
                 array = unpickler.np.fromfile(unpickler.file_handle,
                                               dtype=self.dtype, count=count)
             else:
@@ -137,7 +140,6 @@ class NumpyArrayWrapper(object):
                 # BUFFER_SIZE bytes to avoid issue and reduce memory overhead
                 # of the read. In non-chunked case count < max_read_count, so
                 # only one read is performed.
-
                 max_read_count = BUFFER_SIZE // min(BUFFER_SIZE,
                                                     self.dtype.itemsize)
 
@@ -150,6 +152,7 @@ class NumpyArrayWrapper(object):
                     array[i:i+read_count] = \
                         unpickler.np.frombuffer(data, dtype=self.dtype,
                                                 count=read_count)
+                    del data
 
             if self.order == 'F':
                 array.shape = self.shape[::-1]

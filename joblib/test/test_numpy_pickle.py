@@ -12,7 +12,8 @@ import glob
 import warnings
 import nose
 
-from joblib.test.common import np, with_numpy
+from joblib.test.common import np, with_numpy, with_memory_usage, memory_used
+from joblib.numpy_pickle_utils import BUFFER_SIZE
 
 # numpy_pickle is not a drop-in replacement of pickle, as it takes
 # filenames instead of open files as arguments.
@@ -371,6 +372,34 @@ def test_compressed_pickle_dump_and_load():
                     nose.tools.assert_equal(result, expected)
         finally:
             os.remove(fname)
+
+
+@with_numpy
+@with_memory_usage
+def test_memory_usage():
+    """Verify memory stays within expected bounds."""
+    filename = env['filename']
+    small_array = np.ones((10, 10))
+    big_array = np.ones((10000, 10000))
+    big_matrix = np.matrix([i for i in range(1000000)])
+    print("")
+    for compress in (True, False):
+        for obj in (small_array, big_array, big_matrix):
+            size = obj.nbytes / 1e6
+            obj_filename = filename + str(np.random.randint(0, 1000))
+            mem_used = memory_used(numpy_pickle.dump,
+                                   obj, obj_filename, compress=compress)
+
+            # The memory used to dump the object shouldn't exceed 10% of the
+            # size of the object itself
+            buffersize = 8 * max(16 * 1024 ** 2 // obj.itemsize, 1) / 1e6
+            nose.tools.assert_true(mem_used <= buffersize)
+
+            mem_used = memory_used(numpy_pickle.load, obj_filename)
+
+            print("TEST:", type(obj), mem_used, size)
+            # There are some buffer effect
+            nose.tools.assert_true(mem_used < size)
 
 
 def _check_pickle(filename, expected_list):
