@@ -114,12 +114,9 @@ class NumpyArrayWrapper(object):
             # The array contained Python objects. We need to unpickle the data.
             array = pickle.load(unpickler.file_handle)
         else:
-            if (unpickler.np.compat.isfileobj(unpickler.file_handle) and
-                    count*self.dtype.itemsize/1e6 > 700):
-                # For very big arrays (> 700MB) and file objects,
-                # use np.fromfile function. This function is fast but do memory
-                # copies for smaller arrays so, in this case, we prefer the
-                # memory intensive way.
+            if unpickler.np.compat.isfileobj(unpickler.file_handle):
+                # For file objects, use np.fromfile function.
+                # This function is fast than the memory-intensive method below.
                 array = unpickler.np.fromfile(unpickler.file_handle,
                                               dtype=self.dtype, count=count)
             else:

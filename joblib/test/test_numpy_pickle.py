@@ -13,7 +13,6 @@ import warnings
 import nose
 
 from joblib.test.common import np, with_numpy, with_memory_usage, memory_used
-from joblib.numpy_pickle_utils import BUFFER_SIZE
 
 # numpy_pickle is not a drop-in replacement of pickle, as it takes
 # filenames instead of open files as arguments.
@@ -356,12 +355,14 @@ def test_memory_usage():
 
             # The memory used to dump the object shouldn't exceed the buffer
             # size used to write array chunks (16MB).
-            buffersize = 16 * 1024 ** 2 / 1e6
-            nose.tools.assert_true(mem_used <= buffersize)
+            write_buf_size = 16 * 1024 ** 2 / 1e6
+            nose.tools.assert_true(mem_used <= write_buf_size)
 
             mem_used = memory_used(numpy_pickle.load, obj_filename)
-            # memory used should be less than array size.
-            nose.tools.assert_true(mem_used < size)
+            # memory used should be less than array size + buffer size used to
+            # read the array chunk by chunk.
+            read_buf_size = 32  # MiB
+            nose.tools.assert_true(mem_used < size + read_buf_size)
 
 
 @with_numpy
