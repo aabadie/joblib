@@ -213,6 +213,17 @@ def test_numpy_persistence():
 
 
 @with_numpy
+def test_numpy_persistence_big_array_compressed():
+    rnd = np.random.RandomState(0)
+    a = rnd.random_sample((5000, 5000))
+    filename = env['filename'] + str(random.randint(0, 1000))
+    numpy_pickle.dump(a, filename, compress=True)
+    a_reloaded = numpy_pickle.load(filename)
+
+    np.testing.assert_array_equal(a, a_reloaded)
+
+
+@with_numpy
 def test_memmap_persistence():
     rnd = np.random.RandomState(0)
     a = rnd.random_sample(10)
