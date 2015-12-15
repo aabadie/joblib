@@ -167,7 +167,7 @@ class NumpyArrayWrapper(object):
         return marray
 
     def read(self, unpickler):
-        """Read the array corresponging to this wrapper.
+        """Read the array corresponding to this wrapper.
 
         Use the unpickler to get all information to correctly read the array.
 
