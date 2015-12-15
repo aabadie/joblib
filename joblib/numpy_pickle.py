@@ -28,11 +28,12 @@ from ._compat import _basestring
 class NumpyArrayWrapper(object):
     """An object to be persisted instead of numpy arrays.
 
-    This object is in charge of:
-    * carrying the information of the persisted array:
-    the subclass, shape, order, dtype of the array. Those
-    ndarray metadata are used to correctly reconstruct the array with numpy
-    functions.
+    This object is used to hack into the pickle machinery and read numpy
+    array data from our custom persistence format.
+    More precisely, this object is used for:
+    * carrying the information of the persisted array: subclass, shape, order,
+    dtype. Those ndarray metadata are used to correctly reconstruct the array
+    with low level numpy functions.
     * determining if memmap is allowed on the array.
     * reading the array bytes from a file.
     * reading the array using memorymap from a file.
@@ -75,10 +76,10 @@ class NumpyArrayWrapper(object):
             # We contain Python objects so we cannot write out the data
             # directly. Instead, we will pickle it out with version 2 of the
             # pickle protocol.
-            pickle.dump(array, pickler.file, protocol=2)
+            pickle.dump(array, pickler.file_handle, protocol=2)
         elif self.order == 'F':
-            if pickler.np.compat.isfileobj(pickler.file):
-                array.T.tofile(pickler.file)
+            if pickler.np.compat.isfileobj(pickler.file_handle):
+                array.T.tofile(pickler.file_handle)
             else:
                 for chunk in pickler.np.nditer(array,
                                                flags=['external_loop',
@@ -86,10 +87,10 @@ class NumpyArrayWrapper(object):
                                                       'zerosize_ok'],
                                                buffersize=buffersize,
                                                order='F'):
-                    pickler.file.write(chunk.tostring('C'))
+                    pickler.file_handle.write(chunk.tostring('C'))
         else:
-            if pickler.np.compat.isfileobj(pickler.file):
-                array.tofile(pickler.file)
+            if pickler.np.compat.isfileobj(pickler.file_handle):
+                array.tofile(pickler.file_handle)
             else:
                 for chunk in pickler.np.nditer(array,
                                                flags=['external_loop',
@@ -97,7 +98,7 @@ class NumpyArrayWrapper(object):
                                                       'zerosize_ok'],
                                                buffersize=buffersize,
                                                order='C'):
-                    pickler.file.write(chunk.tostring('C'))
+                    pickler.file_handle.write(chunk.tostring('C'))
 
     def read_array(self, unpickler):
         """Read array from unpickler file handle.
@@ -177,7 +178,7 @@ class NumpyArrayWrapper(object):
 
         Returns
         -------
-        array: numpy.ndarray or numpy.memmap or numpy.matrix
+        array: numpy.ndarray
 
         """
         # When requested, only use memmap mode if allowed.
@@ -208,7 +209,7 @@ class NumpyPickler(Pickler):
     * persistence of numpy arrays in a single file.
 
     * optional compression using GzipFile, with a special care on avoid
-    temporaries.
+    memory copies.
 
     Attributes
     ----------
@@ -223,8 +224,8 @@ class NumpyPickler(Pickler):
 
     def __init__(self, fp, protocol=None):
         """Constructor. Store the useful information for later."""
-        self.file = fp
-        self.compress = isinstance(self.file, gzip.GzipFile)
+        self.file_handle = fp
+        self.compress = isinstance(self.file_handle, gzip.GzipFile)
 
         # By default we want a pickle protocol that only changes with
         # the major python version and not the minor one
@@ -232,7 +233,7 @@ class NumpyPickler(Pickler):
             protocol = (pickle.DEFAULT_PROTOCOL if PY3
                         else pickle.HIGHEST_PROTOCOL)
 
-        Pickler.__init__(self, self.file, protocol=protocol)
+        Pickler.__init__(self, self.file_handle, protocol=protocol)
         # delayed import of numpy, to avoid tight coupling
         try:
             import numpy as np
@@ -268,11 +269,12 @@ class NumpyPickler(Pickler):
                 # Pickling doesn't work with memmapped arrays
                 obj = self.np.asanyarray(obj)
 
-            # This converts on the fly the array in a wrapper
+            # The array wrapper is pickled instead of the real array.
             wrapper = self._create_array_wrapper(obj)
             Pickler.save(self, wrapper)
 
-            # Array is stored right after the wrapper
+            # And then array bytes are stored right after the wrapper.
+            # This breaks the pickle format.
             wrapper.write_array(obj, self)
             return
 
@@ -291,14 +293,13 @@ class NumpyUnpickler(Unpickler):
     filename: str
         Name of the file to unpickle from. It should correspond to file_handle.
     np: module
-        Contain pointer to imported numpy module (if available).
+        Reference to numpy module if numpy is installed else None.
 
     """
 
     dispatch = Unpickler.dispatch.copy()
 
     def __init__(self, filename, file_handle, mmap_mode=None):
-        """Constructor."""
         # The next line is for backward compatibility with pickle generated
         # with joblib versions less than 0.10.
         self._dirname = os.path.dirname(filename)
@@ -317,9 +318,10 @@ class NumpyUnpickler(Unpickler):
     def load_build(self):
         """Called to set the state of a newly created object.
 
-        We capture it to replace our place-holder objects,
-        NDArrayWrapper, by the array we are interested in. We
+        We capture it to replace our place-holder objects, NDArrayWrapper or
+        NumpyArrayWrapper, by the array we are interested in. We
         replace them directly in the stack of pickler.
+        NDArrayWrapper is used for backward compatibility with joblib <= 0.9.
         """
         Unpickler.load_build(self)
 
@@ -329,7 +331,8 @@ class NumpyUnpickler(Unpickler):
                 raise ImportError("Trying to unpickle an ndarray, "
                                   "but numpy didn't import correctly")
             array_wrapper = self.stack.pop()
-            self.compat_mode = isinstance(array_wrapper, NDArrayWrapper)
+            # If any NDArrayWrapper is found, we switch to compatibility mode.
+            self.compat_mode |= isinstance(array_wrapper, NDArrayWrapper)
             self.stack.append(array_wrapper.read(self))
 
     # Be careful to register our new method.
@@ -363,11 +366,7 @@ def dump(value, filename, compress=0, protocol=None, cache_size=None):
     protocol: positive int
         Pickle protocol, see pickle.dump documentation for more details.
     cache_size: positive int, optional
-        Fixes the order of magnitude (in megabytes) of the cache used
-        for in-memory compression. Note that this is just an order of
-        magnitude estimate and that for big arrays, the code will go
-        over this value at dump and at load time.
-        This option is deprecated in 0.10.
+        This option is deprecated in 0.10 and has no effect.
 
     Returns
     -------
@@ -401,11 +400,13 @@ def dump(value, filename, compress=0, protocol=None, cache_size=None):
 
     if cache_size is not None:
         # Cache size is deprecated starting from version 0.10
-        warnings.warn("Cache size is deprecated and will be ignored.",
+        warnings.warn("Please do not set 'cache_size' in joblib.dump, "
+                      "this parameter has no effect and will be removed. "
+                      "You used 'cache_size={0}'".format(cache_size),
                       DeprecationWarning, stacklevel=2)
 
     try:
-        if compress > 0:
+        if compress != 0:
             fp = gzip_file_factory(filename, 'wb',
                                    compresslevel=compress)
         else:
@@ -413,7 +414,7 @@ def dump(value, filename, compress=0, protocol=None, cache_size=None):
         pickler = NumpyPickler(fp, protocol=protocol)
         pickler.dump(value)
     finally:
-        if 'pickler' in locals() and hasattr(pickler, 'file'):
+        if 'pickler' in locals() and hasattr(pickler, 'file_handle'):
             fp.flush()
             fp.close()
     return [filename]

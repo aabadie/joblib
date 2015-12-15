@@ -333,8 +333,11 @@ def test_cache_size_warning():
             for warn in w:
                 nose.tools.assert_equal(warn.category, DeprecationWarning)
                 nose.tools.assert_equal(warn.message.args[0],
-                                        'Cache size is deprecated and '
-                                        'will be ignored.')
+                                        "Please do not set 'cache_size' in "
+                                        "joblib.dump, this parameter has no "
+                                        "effect and will be removed. "
+                                        "You used 'cache_size={0}'".format(
+                                            cache_size))
 
 
 @with_numpy

@@ -44,28 +44,41 @@ def get_joblib_version_as_tuple(joblib_version=joblib.__version__):
     return tuple(map(int, get_joblib_version(joblib_version)))
 
 
-def write_test_pickle(to_pickle):
+def write_test_pickle(to_pickle, args):
+    cache_size = None
+    compress = args.compress
     joblib_version = get_joblib_version()
     py_version = '{0[0]}{0[1]}'.format(sys.version_info)
     numpy_version = ''.join(np.__version__.split('.')[:2])
     print('file:', np.__file__)
 
-    pickle_filename = 'joblib_{0}_compressed_pickle_py{1}_np{2}.gz'.format(
-        joblib_version, py_version, numpy_version)
-    joblib.dump(to_pickle, pickle_filename, compress=True)
+    # The game here is to
+    pickle_filename = 'joblib_{0}'.format(joblib_version)
+    extension = '.pkl'
+    if compress:
+        cache_size = 0 if args.cache_size else None
+        extension = '.gz'
+        pickle_filename += '_compressed'
+        if cache_size is not None:
+            pickle_filename += '_cache_size'
 
-    if (get_joblib_version_as_tuple() < (0, 10) and
-            get_joblib_version_as_tuple() >= (0, 9, 3)):
-        # Pickle compressed arrays using numpy functions in external files.
-        pickle_np_fname = 'joblib_{0}_compressed_pickle_np_py{1}_np{2}.gz'.\
-            format(joblib_version, py_version, numpy_version)
-        joblib.dump(to_pickle, pickle_np_fname, compress=True, cache_size=0)
+    pickle_filename += '_pickle_py{0}_np{1}{2}'.format(py_version,
+                                                       numpy_version,
+                                                       extension)
 
-    pickle_filename = 'joblib_{0}_pickle_py{1}_np{2}.pkl'.format(
-        joblib_version, py_version, numpy_version)
-    joblib.dump(to_pickle, pickle_filename, compress=False)
+    joblib.dump(to_pickle, pickle_filename,
+                compress=compress,
+                cache_size=cache_size)
 
 if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser(description="Joblib pickle data "
+                                                 "generator.")
+    parser.add_argument('--cache_size', action="store_true",
+                        help="Force creation of companion numpy "
+                             "files for pickled arrays.")
+    parser.add_argument('--compress', action="store_true",
+                        help="Generate compress pickles.")
     # We need to be specific about dtypes in particular endianness
     # because the pickles can be generated on one architecture and
     # the tests run on another one. See
@@ -82,4 +95,4 @@ if __name__ == '__main__':
                  # unicode string with non-ascii chars
                  u"C'est l'\xe9t\xe9 !"]
 
-    write_test_pickle(to_pickle)
+    write_test_pickle(to_pickle, parser.parse_args())
