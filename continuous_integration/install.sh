@@ -73,6 +73,9 @@ if [ -z "$NUMPY_VERSION" ]; then
     # setup.cfg so doing it the hacky way ...
     cat setup.cfg | grep -v 'with-doctest=' > setup.cfg.new
     mv setup.cfg{.new,}
+else
+    # We want to ensure no memory copies are performed when using numpy.
+    pip install memory_profiler
 fi
 
 if [[ "$COVERAGE" == "true" ]]; then
