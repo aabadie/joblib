@@ -78,9 +78,6 @@ if __name__ == '__main__':
                  # compatibility alias for .tobytes which was
                  # added in 1.9.0
                  np.arange(256, dtype=np.uint8).tostring(),
-                 # np.matrix is a subclass of nd.array, here we want
-                 # to verify this type of object is correctly unpickled
-                 # among versions.
                  np.matrix([0, 1, 2], dtype=np.int64),
                  # unicode string with non-ascii chars
                  u"C'est l'\xe9t\xe9 !"]
