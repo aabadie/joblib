@@ -45,7 +45,7 @@ def get_joblib_version_as_tuple(joblib_version=joblib.__version__):
 
 
 def write_test_pickle(to_pickle, args):
-    cache_size = None
+    kwargs = {}
     compress = args.compress
     joblib_version = get_joblib_version()
     py_version = '{0[0]}{0[1]}'.format(sys.version_info)
@@ -55,19 +55,19 @@ def write_test_pickle(to_pickle, args):
     pickle_filename = 'joblib_{0}'.format(joblib_version)
     extension = '.pkl'
     if compress:
-        cache_size = 0 if args.cache_size else None
-        extension = '.gz'
         pickle_filename += '_compressed'
-        if cache_size is not None:
+        if args.cache_size:
+            kwargs['cache_size'] = 0
             pickle_filename += '_cache_size'
+
+        kwargs['compress'] = True
+        extension = '.gz'
 
     pickle_filename += '_pickle_py{0}_np{1}{2}'.format(py_version,
                                                        numpy_version,
                                                        extension)
 
-    joblib.dump(to_pickle, pickle_filename,
-                compress=compress,
-                cache_size=cache_size)
+    joblib.dump(to_pickle, pickle_filename, **kwargs)
 
 if __name__ == '__main__':
     import argparse
