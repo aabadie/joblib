@@ -168,6 +168,8 @@ def _read_bytes(fp, size, error_template="ran out of data"):
     Required as e.g. ZipExtFile in python 2.6 can return less data than
     requested.
 
+    This function was taken from numpy/lib/format.py in version 1.10.
+
     Parameters
     ----------
     fp: file-like object

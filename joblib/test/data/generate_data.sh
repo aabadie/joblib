@@ -13,5 +13,5 @@ do
   python create_numpy_pickle.py --compress
   # Generate compressed pickles with numpy arrays in companion files.
   python create_numpy_pickle.py --compress --cache_size
-  . deactivate
 done
+. deactivate

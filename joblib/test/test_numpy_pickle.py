@@ -178,7 +178,7 @@ def test_numpy_persistence():
             for item in obj_:
                 nose.tools.assert_true(isinstance(item, np.ndarray))
             # And finally, check that all the values are equal.
-            nose.tools.assert_true(np.all(np.array(obj) == np.array(obj_)))
+            np.testing.assert_array_equal(np.array(obj), np.array(obj_))
 
         # Now test with array subclasses
         for obj in (
@@ -302,11 +302,11 @@ def test_compress_mmap_mode_warning():
     a = rnd.random_sample(10)
     this_filename = env['filename'] + str(random.randint(0, 1000))
     numpy_pickle.dump(a, this_filename, compress=1)
-    with warnings.catch_warnings(record=True) as w:
+    with warnings.catch_warnings(record=True) as caught_warnings:
         warnings.simplefilter("always")
         numpy_pickle.load(this_filename, mmap_mode='r+')
-        nose.tools.assert_equal(len(w), 1)
-        for warn in w:
+        nose.tools.assert_equal(len(caught_warnings), 1)
+        for warn in caught_warnings:
             nose.tools.assert_equal(warn.category, DeprecationWarning)
             nose.tools.assert_equal(warn.message.args[0],
                                     'File "%(filename)s" appears to be '
@@ -324,13 +324,14 @@ def test_cache_size_warning():
     a = rnd.random_sample((10, 2))
 
     for cache_size in (None, 0, 10):
-        with warnings.catch_warnings(record=True) as w:
+        with warnings.catch_warnings(record=True) as caught_warnings:
             warnings.simplefilter("always")
             filenames = numpy_pickle.dump(a, filename,
                                           cache_size=cache_size)
-            nose.tools.assert_equal(len(w),
-                                    1 if cache_size is not None else 0)
-            for warn in w:
+            expected_nb_warnings = 1 if cache_size is not None else 0
+            nose.tools.assert_equal(len(caught_warnings),
+                                    expected_nb_warnings)
+            for warn in caught_warnings:
                 nose.tools.assert_equal(warn.category, DeprecationWarning)
                 nose.tools.assert_equal(warn.message.args[0],
                                         "Please do not set 'cache_size' in "
@@ -346,11 +347,11 @@ def test_memory_usage():
     """Verify memory stays within expected bounds."""
     filename = env['filename']
     small_array = np.ones((10, 10))
-    big_array = np.ones((10000, 10000))
-    big_matrix = np.matrix([i for i in range(1000000)])
-    print("")
+    big_array = np.ones((5000, 5000))
+    small_matrix = np.matrix(small_array)
+    big_matrix = np.matrix(big_array)
     for compress in (True, False):
-        for obj in (small_array, big_array, big_matrix):
+        for obj in (small_array, big_array, small_matrix, big_matrix):
             size = obj.nbytes / 1e6
             obj_filename = filename + str(np.random.randint(0, 1000))
             mem_used = memory_used(numpy_pickle.dump,
@@ -384,7 +385,7 @@ def test_compressed_pickle_dump_and_load():
                      # np.matrix is a subclass of nd.array, here we want
                      # to verify this type of object is correctly unpickled
                      # among versions.
-                     np.matrix([0, 1, 2], dtype=np.int64),
+                     np.matrix([0, 1, 2], dtype=np.dtype('<i8')),
                      u"C'est l'\xe9t\xe9 !"]
 
     with tempfile.NamedTemporaryFile(suffix='.gz', dir=env['dir']) as f:
@@ -396,7 +397,7 @@ def test_compressed_pickle_dump_and_load():
         dumped_filenames = numpy_pickle.dump(expected_list, fname, compress=1)
         result_list = numpy_pickle.load(fname)
         for result, expected in zip(result_list, expected_list):
-            if isinstance(expected, (np.ndarray, np.matrix)):
+            if isinstance(expected, np.ndarray):
                 nose.tools.assert_equal(result.dtype, expected.dtype)
                 np.testing.assert_equal(result, expected)
             else:
@@ -422,13 +423,14 @@ def _check_pickle(filename, expected_list):
         py_version_used_for_writing, 4)
     if pickle_reading_protocol >= pickle_writing_protocol:
         try:
-            with warnings.catch_warnings(record=True) as catched_warnings:
+            with warnings.catch_warnings(record=True) as caught_warnings:
                 warnings.simplefilter("always")
                 result_list = numpy_pickle.load(filename)
-                nose.tools.assert_equal(len(catched_warnings),
-                                        1 if ("0.9" in filename or
-                                              "0.8.4" in filename) else 0)
-            for warn in catched_warnings:
+                expected_nb_warnings = 1 if ("0.9" in filename or
+                                             "0.8.4" in filename) else 0
+                nose.tools.assert_equal(len(caught_warnings),
+                                        expected_nb_warnings)
+            for warn in caught_warnings:
                 nose.tools.assert_equal(warn.category, DeprecationWarning)
                 nose.tools.assert_equal(warn.message.args[0],
                                         "The file '%s' has been generated with "
@@ -436,7 +438,7 @@ def _check_pickle(filename, expected_list):
                                         "Please regenerate this pickle file." %
                                         filename)
             for result, expected in zip(result_list, expected_list):
-                if isinstance(expected, (np.ndarray, np.matrix)):
+                if isinstance(expected, np.ndarray):
                     nose.tools.assert_equal(result.dtype, expected.dtype)
                     np.testing.assert_equal(result, expected)
                 else:
@@ -485,7 +487,7 @@ def test_joblib_pickle_across_python_versions():
                      # np.matrix is a subclass of nd.array, here we want
                      # to verify this type of object is correctly unpickled
                      # among versions.
-                     np.matrix([0, 1, 2], dtype=np.int64),
+                     np.matrix([0, 1, 2], dtype=np.dtype('<i8')),
                      u"C'est l'\xe9t\xe9 !"]
 
     # Testing all the *.gz and *.pkl (compressed and non compressed
@@ -493,8 +495,8 @@ def test_joblib_pickle_across_python_versions():
     # the joblib/test/data/create_numpy_pickle.py script for the
     # relevant python, joblib and numpy versions.
     test_data_dir = os.path.dirname(os.path.abspath(data.__file__))
-    data_filenames = glob.glob(os.path.join(test_data_dir, 'joblib_*.gz'))
-    data_filenames += glob.glob(os.path.join(test_data_dir, 'joblib_*.pkl'))
+    data_filenames = glob.glob(os.path.join(test_data_dir, '*.gz'))
+    data_filenames += glob.glob(os.path.join(test_data_dir, '*.pkl'))
 
     for fname in data_filenames:
         _check_pickle(fname, expected_list)

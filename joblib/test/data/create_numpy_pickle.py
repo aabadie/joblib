@@ -50,7 +50,6 @@ def write_test_pickle(to_pickle, args):
     joblib_version = get_joblib_version()
     py_version = '{0[0]}{0[1]}'.format(sys.version_info)
     numpy_version = ''.join(np.__version__.split('.')[:2])
-    print('file:', np.__file__)
 
     # The game here is to
     pickle_filename = 'joblib_{0}'.format(joblib_version)
@@ -91,7 +90,7 @@ if __name__ == '__main__':
                  # compatibility alias for .tobytes which was
                  # added in 1.9.0
                  np.arange(256, dtype=np.uint8).tostring(),
-                 np.matrix([0, 1, 2], dtype=np.int64),
+                 np.matrix([0, 1, 2], dtype=np.dtype('<i8')),
                  # unicode string with non-ascii chars
                  u"C'est l'\xe9t\xe9 !"]
 
