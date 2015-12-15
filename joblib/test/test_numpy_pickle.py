@@ -381,7 +381,7 @@ def test_compressed_pickle_dump_and_load():
                      # np.matrix is a subclass of nd.array, here we want
                      # to verify this type of object is correctly unpickled
                      # among versions.
-                     np.matrix([0, 1, 2]),
+                     np.matrix([0, 1, 2], dtype=np.int64),
                      u"C'est l'\xe9t\xe9 !"]
 
     with tempfile.NamedTemporaryFile(suffix='.gz', dir=env['dir']) as f:
@@ -393,7 +393,7 @@ def test_compressed_pickle_dump_and_load():
         dumped_filenames = numpy_pickle.dump(expected_list, fname, compress=1)
         result_list = numpy_pickle.load(fname)
         for result, expected in zip(result_list, expected_list):
-            if isinstance(expected, np.ndarray):
+            if isinstance(expected, (np.ndarray, np.matrix)):
                 nose.tools.assert_equal(result.dtype, expected.dtype)
                 np.testing.assert_equal(result, expected)
             else:
@@ -433,7 +433,7 @@ def _check_pickle(filename, expected_list):
                                         "Please regenerate this pickle file." %
                                         filename)
             for result, expected in zip(result_list, expected_list):
-                if isinstance(expected, np.ndarray):
+                if isinstance(expected, (np.ndarray, np.matrix)):
                     nose.tools.assert_equal(result.dtype, expected.dtype)
                     np.testing.assert_equal(result, expected)
                 else:
@@ -482,7 +482,7 @@ def test_joblib_pickle_across_python_versions():
                      # np.matrix is a subclass of nd.array, here we want
                      # to verify this type of object is correctly unpickled
                      # among versions.
-                     np.matrix([0, 1, 2]),
+                     np.matrix([0, 1, 2], dtype=np.int64),
                      u"C'est l'\xe9t\xe9 !"]
 
     # Testing all the *.gz and *.pkl (compressed and non compressed
