@@ -54,9 +54,10 @@ def memory_used(func, *args, **kwargs):
     if memory_usage is None:
         return np.NaN
 
-    ref_mem = memory_usage(-1, interval=.2, timeout=1, max_usage=True)
+    gc.collect()
+    ref_mem = memory_usage(-1, interval=.001, timeout=1, max_usage=True)
     mem_use = memory_usage((func, args, kwargs),
-                           max_usage=True)
+                           interval=.001, timeout=1, max_usage=True)
 
     return mem_use[0] - ref_mem
 
