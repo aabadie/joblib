@@ -14,7 +14,7 @@ from contextlib import closing
 from .numpy_pickle_utils import PY3
 from .numpy_pickle_utils import _ZFILE_PREFIX
 from .numpy_pickle_utils import Unpickler, Pickler
-from .numpy_pickle_utils import gzip_file_factory
+from .numpy_pickle_utils import GzipFileWithoutCRC
 from .numpy_pickle_utils import _read_magic, _check_filetype
 from .numpy_pickle_utils import _read_bytes, BUFFER_SIZE
 from .numpy_pickle_compat import load_compatibility
@@ -407,8 +407,8 @@ def dump(value, filename, compress=0, protocol=None, cache_size=None):
 
     try:
         if compress != 0:
-            fp = gzip_file_factory(filename, 'wb',
-                                   compresslevel=compress)
+            fp = GzipFileWithoutCRC(filename, 'wb',
+                                    compresslevel=compress)
         else:
             fp = open(filename, 'wb')
         pickler = NumpyPickler(fp, protocol=protocol)

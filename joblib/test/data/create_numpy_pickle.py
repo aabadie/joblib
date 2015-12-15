@@ -30,20 +30,6 @@ def get_joblib_version(joblib_version=joblib.__version__):
     return '.'.join([m.group(1) for m in matches if m is not None])
 
 
-def get_joblib_version_as_tuple(joblib_version=joblib.__version__):
-    """Return normalised joblib version as a tuple.
-
-    >>> get_joblib_version_as_tuple('0.8.4')
-    (0, 8, 4)
-    >>> get_joblib_version_as_tuple('0.8.4b1')
-    (0, 8, 4)
-    >>> get_joblib_version_as_tuple('0.9.dev0')
-    (0, 9)
-
-    """
-    return tuple(map(int, get_joblib_version(joblib_version)))
-
-
 def write_test_pickle(to_pickle, args):
     kwargs = {}
     compress = args.compress

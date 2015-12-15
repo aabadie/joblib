@@ -7,6 +7,7 @@
 import pickle
 import sys
 import io
+import gzip
 
 PY3 = sys.version_info[0] >= 3
 PY26 = sys.version_info[0] == 2 and sys.version_info[1] == 6
@@ -44,68 +45,59 @@ _ZFILE_PREFIX = asbytes('ZF')
 _GZIP_PREFIX = b'\x1f\x8b'
 
 
-def gzip_file_factory(f, mode='rb', compresslevel=0):
-    """Factory to produce the class so that we can do a lazy import on gzip."""
-    import gzip
-    from gzip import WRITE
+class GzipFileWithoutCRC(gzip.GzipFile):
 
-    class GzipFile(gzip.GzipFile):
+    def _init_write(self, filename):
+        self.name = filename
+        self.crc = 0xffffffff
+        self.size = 0
+        self.writebuf = []
+        self.bufsize = 0
 
-        def _init_write(self, filename):
-            self.name = filename
+    def write(self, data):
+        try:
+            # works with Python < 3.5
+            self._check_closed()
+        except AttributeError:
+            pass
+        if self.mode != gzip.WRITE:
+            import errno
+            raise OSError(errno.EBADF,
+                          "write() on read-only GzipFile object")
+        if self.fileobj is None:
+            raise ValueError("write() on closed GzipFile object")
+        # Convert data type if called by io.BufferedWriter.
+        if not PY26 and isinstance(data, memoryview):
+            data = data.tobytes()
+        if len(data) > 0:
+            self.size = self.size + len(data)
             self.crc = 0xffffffff
-            self.size = 0
-            self.writebuf = []
-            self.bufsize = 0
-
-        def write(self, data):
+            self.fileobj.write(self.compress.compress(data))
             try:
                 # works with Python < 3.5
-                self._check_closed()
+                self.offset += len(data)
             except AttributeError:
                 pass
-            if self.mode != WRITE:
-                import errno
-                raise OSError(errno.EBADF,
-                              "write() on read-only GzipFile object")
-            if self.fileobj is None:
-                raise ValueError("write() on closed GzipFile object")
-            # Convert data type if called by io.BufferedWriter.
-            if not PY26 and isinstance(data, memoryview):
-                data = data.tobytes()
-            if len(data) > 0:
-                self.size = self.size + len(data)
-                self.crc = 0xffffffff
-                self.fileobj.write(self.compress.compress(data))
-                try:
-                    # works with Python < 3.5
-                    self.offset += len(data)
-                except AttributeError:
-                    pass
-            return len(data)
+        return len(data)
 
-        def _read_eof(self):
-            pass
+    def _read_eof(self):
+        pass
 
-        def _init_read(self):
-            self.crc = 0xffffffff
-            self.size = 0
+    def _init_read(self):
+        self.crc = 0xffffffff
+        self.size = 0
 
-        def _add_read_data(self, data):
-            self.crc = 0xffffffff
-            if not PY26:
-                offset = self.offset - self.extrastart
-                self.extrabuf = self.extrabuf[offset:] + data
-                self.extrasize = self.extrasize + len(data)
-                self.extrastart = self.offset
-            else:
-                self.extrabuf = self.extrabuf + data
-                self.extrasize = self.extrasize + len(data)
-            self.size = self.size + len(data)
-
-    f = GzipFile(f, mode, compresslevel=compresslevel)
-
-    return f
+    def _add_read_data(self, data):
+        self.crc = 0xffffffff
+        if not PY26:
+            offset = self.offset - self.extrastart
+            self.extrabuf = self.extrabuf[offset:] + data
+            self.extrasize = self.extrasize + len(data)
+            self.extrastart = self.offset
+        else:
+            self.extrabuf = self.extrabuf + data
+            self.extrasize = self.extrasize + len(data)
+        self.size = self.size + len(data)
 
 
 ###############################################################################
@@ -148,7 +140,7 @@ def _check_filetype(filename, magic):
 
     """
     if magic == _GZIP_PREFIX:
-        return gzip_file_factory(filename)
+        return GzipFileWithoutCRC(filename)
 
     return open(filename, 'rb')
 
