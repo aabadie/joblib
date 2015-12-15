@@ -115,15 +115,17 @@ def print_bench_summary(args):
     """Nice bench summary function."""
     summary = """Benchmark summary:
     - Global values:
-        . Number of tries to compute mean execution time: {0}
-        . Compression levels   : {1}
-        . Memory map mode      : {2}
-        . Bench nifti data     : {3}
-        . Bench big array      : {4}
-        . Bench 2 big arrays   : {5}
-        . Bench big dictionnary: {6}
-        . Bench array+dict     : {7}
-""".format(args.tries,
+        . Joblib version: {0}
+        . Number of tries to compute mean execution time: {1}
+        . Compression levels   : {2}
+        . Memory map mode      : {3}
+        . Bench nifti data     : {4}
+        . Bench big array      : {5}
+        . Bench 2 big arrays   : {6}
+        . Bench big dictionnary: {7}
+        . Bench array+dict     : {8}
+""".format(joblib.__version__,
+           args.tries,
            ", ".join(map(str, args.compress)),
            args.mmap,
            args.nifti,
@@ -207,6 +209,11 @@ def run_bench(func, obj, name, **kwargs):
 def run(args):
     """Run the full bench suite."""
     print_bench_summary(args)
+
+    if (not args.nifti and not args.array and not args.arrays and
+            not args.dict and not args.combo):
+        print("Nothing to bench. Exiting")
+        return
 
     compress_levels = args.compress
     mmap_mode = args.mmap
