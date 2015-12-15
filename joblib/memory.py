@@ -8,7 +8,6 @@ is called with the same input arguments.
 # Copyright (c) 2009 Gael Varoquaux
 # License: BSD Style, 3 clauses.
 
-
 from __future__ import with_statement
 import os
 import shutil

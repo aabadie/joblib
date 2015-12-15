@@ -337,8 +337,7 @@ def test_cache_size_warning():
     for cache_size in (None, 0, 10):
         with warnings.catch_warnings(record=True) as caught_warnings:
             warnings.simplefilter("always")
-            filenames = numpy_pickle.dump(a, filename,
-                                          cache_size=cache_size)
+            numpy_pickle.dump(a, filename, cache_size=cache_size)
             expected_nb_warnings = 1 if cache_size is not None else 0
             nose.tools.assert_equal(len(caught_warnings),
                                     expected_nb_warnings)

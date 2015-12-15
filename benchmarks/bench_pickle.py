@@ -4,7 +4,6 @@ Benching joblib pickle I/O.
 Warning: this is slow, and the benchs are easily offset by other disk
 activity.
 """
-import sys
 import os
 import time
 import shutil
@@ -39,7 +38,7 @@ def kill_disk_cache():
                 raise e
     else:
         # Write ~100M to the disk
-        file('tmp', 'w').write(np.random.random(2e7))
+        open('tmp', 'w').write(np.random.random(2e7))
 
 
 def delete_obj(obj):
@@ -107,9 +106,9 @@ def print_line(dataset, strategy,
                disk_used):
     """Nice printing function."""
     print('% 15s, %12s, % 6.3f, % 7.4f, % 9.1f, % 9.1f, % 5.1f' % (
-            dataset, strategy,
-            write_time, read_time,
-            mem_write, mem_read, disk_used))
+          dataset, strategy,
+          write_time, read_time,
+          mem_write, mem_read, disk_used))
 
 
 def print_bench_summary(args):
@@ -217,8 +216,8 @@ def run(args):
     a2_shape = (10000000, )
 
     print('% 15s, %12s, % 6s, % 7s, % 9s, % 9s, % 5s' % (
-            'Dataset', 'strategy', 'write', 'read',
-            'mem_write', 'mem_read', 'disk'))
+          'Dataset', 'strategy', 'write', 'read',
+          'mem_write', 'mem_read', 'disk'))
 
     if args.nifti:
         # Nifti images
