@@ -44,9 +44,9 @@ class NumpyArrayWrapper(object):
         Determine the subclass of the wrapped array.
     shape: numpy.ndarray shape
         Determine the shape of the wrapped array.
-    order: str
-        Determine the order of wrapped array data. Allowed values are 'F' for
-        fortran order and 'C' for C order.
+    order: {'C', 'F'}
+        Determine the order of wrapped array data. 'C' is for C order, 'F' is
+        for fortran order.
     dtype: numpy.ndarray dtype
         Determine the data type of the wrapped array.
     allow_mmap: bool
