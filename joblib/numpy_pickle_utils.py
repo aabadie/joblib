@@ -46,7 +46,7 @@ _GZIP_PREFIX = b'\x1f\x8b'
 
 
 class GzipFileWithoutCRC(gzip.GzipFile):
-    """Monkey patched version of GzipFile which disables the CRC checks.
+    """Subclass of gzip.GzipFile with CRC checks disabled.
 
     This version is here for performance reason as CRC computation increases
     significantly the read/write time of compressed files.
