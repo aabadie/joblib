@@ -6,14 +6,11 @@ Release 0.10.0
 
 Alexandre Abadie
 
-    Joblib now uses a single file when pickling objects with dump and
-    load functions. Note that this version breaks the pickle format.
-    Versions of joblib pickle files prior to 0.10 are still compatible with
-    but it's recommended to clear old pickle files and recreate them if
-    possible.
-    A special care was taken with memory consumption: when reading and writing
-    a cache file using the compressed mode, objects are never duplicated in
-    memory.
+    Joblib pickle format change: joblib.dump always create a single pickle file
+    and joblib.dump/joblib.save never do any memory copy when writing/reading
+    pickle files. Reading pickle files generated with joblib versions prior
+    to 0.10 will be supported for a limited amount of time, we advise to
+    regenerate them from scratch when convenient.
 
 Release 0.9.3
 -------------
