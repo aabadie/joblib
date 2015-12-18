@@ -144,10 +144,11 @@ def _check_filetype(filename, magic):
         a file like object
 
     """
+    fp = open(filename, 'rb', buffering=200*1024**2)
     if magic == _GZIP_PREFIX:
-        return GzipFileWithoutCRC(filename)
+        return GzipFileWithoutCRC(fileobj=fp)
 
-    return open(filename, 'rb')
+    return fp
 
 
 # Utility functions/variables from numpy required for writing arrays.

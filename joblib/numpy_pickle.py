@@ -406,13 +406,16 @@ def dump(value, filename, compress=0, protocol=None, cache_size=None):
                       DeprecationWarning, stacklevel=2)
 
     try:
+        fp = open(filename, 'wb', buffering=200*1024**2)
         if compress != 0:
-            fp = GzipFileWithoutCRC(filename, 'wb',
-                                    compresslevel=compress)
+            cfp = GzipFileWithoutCRC(fileobj=fp, mode='wb',
+                                     compresslevel=compress)
+            pickler = NumpyPickler(cfp, protocol=protocol)
+            pickler.dump(value)
+            cfp.close()
         else:
-            fp = open(filename, 'wb')
-        pickler = NumpyPickler(fp, protocol=protocol)
-        pickler.dump(value)
+            pickler = NumpyPickler(fp, protocol=protocol)
+            pickler.dump(value)
     finally:
         if 'pickler' in locals() and hasattr(pickler, 'file_handle'):
             fp.flush()
