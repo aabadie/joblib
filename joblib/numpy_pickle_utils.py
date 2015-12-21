@@ -118,6 +118,35 @@ def _check_buffering(filename):
     return statvfs.f_bsize
 
 
+def inspect_dict_for_arrays(obj):
+    """Detect if obj contains a big bunch of numpy arrays."""
+    if np is None:
+        return False
+
+    if not isinstance(obj, dict):
+        return False
+
+    array_size = 0
+
+    for k, v in obj.items():
+        if isinstance(v, np.ndarray):
+            array_size += v.nbytes
+        elif isinstance(v, dict):
+            return inspect_dict_for_arrays(v)
+
+    return array_size / 1024 ** 2 > 64
+
+
+def _check_buffered_mode(value):
+    if inspect_dict_for_arrays(value):
+        return False
+
+    if sys.getsizeof(value) / 1024 ** 2 > 64:
+        return False
+
+    return True
+
+
 def _read_magic(file_handle):
     """Utility to check the magic signature of a file.
 
@@ -156,7 +185,17 @@ def _check_filetype(filename, magic):
     """
     fp = open(filename, 'rb', buffering=_check_buffering(filename))
     if magic == _GZIP_PREFIX:
-        return GzipFileWithoutCRC(fileobj=fp)
+        fobj = fp
+        if os.stat(filename).st_size / 1024 ** 2 < 64:
+            # Use buffered version with small files
+            # we allow memory copies in this case
+            buf = io.BytesIO()
+            buf.write(fp.read())
+            fp.close()
+            buf.seek(0)
+            fobj = buf
+
+        return GzipFileWithoutCRC(fileobj=fobj)
 
     return fp
 
