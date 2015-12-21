@@ -8,6 +8,7 @@ import pickle
 import sys
 import io
 import gzip
+import os
 
 PY3 = sys.version_info[0] >= 3
 PY26 = sys.version_info[0] == 2 and sys.version_info[1] == 6
@@ -108,6 +109,15 @@ class GzipFileWithoutCRC(gzip.GzipFile):
 ###############################################################################
 # Cache file utilities
 
+def _check_buffering(filename):
+    """Return the best buffering size to read/write filename."""
+    if sys.platform != 'linux':
+        return -1
+
+    statvfs = os.statvfs(os.path.dirname(filename))
+    return statvfs.f_bsize
+
+
 def _read_magic(file_handle):
     """Utility to check the magic signature of a file.
 
@@ -144,7 +154,7 @@ def _check_filetype(filename, magic):
         a file like object
 
     """
-    fp = open(filename, 'rb', buffering=200*1024**2)
+    fp = open(filename, 'rb', buffering=_check_buffering(filename))
     if magic == _GZIP_PREFIX:
         return GzipFileWithoutCRC(fileobj=fp)
 

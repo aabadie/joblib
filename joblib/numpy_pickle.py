@@ -15,7 +15,7 @@ from .numpy_pickle_utils import PY3
 from .numpy_pickle_utils import _ZFILE_PREFIX
 from .numpy_pickle_utils import Unpickler, Pickler
 from .numpy_pickle_utils import GzipFileWithoutCRC
-from .numpy_pickle_utils import _read_magic, _check_filetype
+from .numpy_pickle_utils import _read_magic, _check_filetype, _check_buffering
 from .numpy_pickle_utils import _read_bytes, BUFFER_SIZE
 from .numpy_pickle_compat import load_compatibility
 from .numpy_pickle_compat import NDArrayWrapper, ZNDArrayWrapper
@@ -406,7 +406,7 @@ def dump(value, filename, compress=0, protocol=None, cache_size=None):
                       DeprecationWarning, stacklevel=2)
 
     try:
-        fp = open(filename, 'wb', buffering=200*1024**2)
+        fp = open(filename, 'wb', buffering=_check_buffering(filename))
         if compress != 0:
             cfp = GzipFileWithoutCRC(fileobj=fp, mode='wb',
                                      compresslevel=compress)
