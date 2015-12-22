@@ -17,7 +17,7 @@ from .numpy_pickle_utils import _ZFILE_PREFIX
 from .numpy_pickle_utils import Unpickler, Pickler
 from .numpy_pickle_utils import GzipFileWithoutCRC
 from .numpy_pickle_utils import _read_magic, _check_filetype
-from .numpy_pickle_utils import _check_buffering, _check_buffered_mode
+from .numpy_pickle_utils import _check_buffering, _use_buffered_mode
 from .numpy_pickle_utils import _read_bytes, BUFFER_SIZE
 from .numpy_pickle_compat import load_compatibility
 from .numpy_pickle_compat import NDArrayWrapper, ZNDArrayWrapper
@@ -410,7 +410,7 @@ def dump(value, filename, compress=0, protocol=None, cache_size=None):
     try:
         fp = open(filename, 'wb', buffering=_check_buffering(filename))
         if compress != 0:
-            if _check_buffered_mode(value):
+            if _use_buffered_mode(value):
                 # dump the full content in a memory buffer
                 buf = io.BytesIO()
                 pickler = NumpyPickler(buf, protocol=protocol)

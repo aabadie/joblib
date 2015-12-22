@@ -118,10 +118,13 @@ def _check_buffering(filename):
     return statvfs.f_bsize
 
 
-def inspect_dict_for_arrays(obj):
+def _has_big_arrays(obj):
     """Detect if obj contains a big bunch of numpy arrays."""
     if np is None:
         return False
+
+    if isinstance(obj, np.ndarray):
+        return obj.nbytes / 1024 ** 2 > 64
 
     if not isinstance(obj, dict):
         return False
@@ -132,13 +135,13 @@ def inspect_dict_for_arrays(obj):
         if isinstance(v, np.ndarray):
             array_size += v.nbytes
         elif isinstance(v, dict):
-            return inspect_dict_for_arrays(v)
+            return _has_big_arrays(v)
 
     return array_size / 1024 ** 2 > 64
 
 
-def _check_buffered_mode(value):
-    if inspect_dict_for_arrays(value):
+def _use_buffered_mode(value):
+    if _has_big_arrays(value):
         return False
 
     if sys.getsizeof(value) / 1024 ** 2 > 64:
