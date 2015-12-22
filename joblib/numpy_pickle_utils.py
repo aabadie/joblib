@@ -118,36 +118,35 @@ def _check_buffering(filename):
     return statvfs.f_bsize
 
 
-def _has_big_arrays(obj):
-    """Detect if obj contains a big bunch of numpy arrays."""
+def _object_size(obj):
+    """Compute the size of an object in memory."""
     if np is None:
-        return False
+        return sys.getsizeof(obj)
 
     if isinstance(obj, np.ndarray):
-        return obj.nbytes / 1024 ** 2 > 64
+        return obj.nbytes
 
-    if not isinstance(obj, dict):
-        return False
+    obj_size = 0
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if isinstance(v, np.ndarray):
+                obj_size += v.nbytes
+            elif isinstance(v, (dict, list, tuple)):
+                obj_size += _object_size(v)
 
-    array_size = 0
+    if isinstance(obj, (tuple, list)):
+        for v in obj:
+            if isinstance(v, np.ndarray):
+                obj_size += v.nbytes
+            elif isinstance(v, (dict, list, tuple)):
+                obj_size += _object_size(v)
 
-    for k, v in obj.items():
-        if isinstance(v, np.ndarray):
-            array_size += v.nbytes
-        elif isinstance(v, dict):
-            return _has_big_arrays(v)
-
-    return array_size / 1024 ** 2 > 64
+    return obj_size
 
 
 def _use_buffered_mode(value):
-    if _has_big_arrays(value):
-        return False
-
-    if sys.getsizeof(value) / 1024 ** 2 > 64:
-        return False
-
-    return True
+    obj_size = _object_size(value) / 1024 ** 2
+    return obj_size < 64
 
 
 def _read_magic(file_handle):

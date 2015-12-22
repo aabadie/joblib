@@ -255,7 +255,7 @@ def run(args):
         print_bench_summary(args)
 
     if (not args.nifti and not args.array and not args.arrays and
-            not args.dict and not args.combo):
+            not args.dict and not args.list and not args.combo):
         print("Nothing to bench. Exiting")
         return
 
