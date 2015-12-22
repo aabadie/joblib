@@ -108,6 +108,23 @@ def generate_rand_dict(size,
     return ret
 
 
+def generate_rand_list(size,
+                       with_arrays=False,
+                       with_string=False,
+                       array_shape=(10, 10)):
+    """Generate list with random values from list of keys."""
+    ret = []
+    rnd = np.random.RandomState(0)
+    for random in rnd.random_sample((size)):
+        if with_arrays:
+            ret.append(rnd.random_sample(array_shape))
+        elif with_string:
+            ret.append(str(random))
+        else:
+            ret.append(int(random))
+    return ret
+
+
 def print_line(dataset, strategy,
                write_time, read_time,
                mem_write, mem_read,
@@ -157,11 +174,23 @@ def print_bench_summary(args):
         . number of keys: {0}
         . value type: {1}
 """.format(args.size, 'np.ndarray'
-           if args.dictarray else 'str'
-            if args.dictstring else 'int')
-        if args.dictarray:
+           if args.valuearray else 'str'
+            if args.valuestring else 'int')
+        if args.valuearray:
             summary += """        . arrays shape: {0}
-""".format(str(tuple(args.dictarrayshape)))
+""".format(str(tuple(args.valuearrayshape)))
+
+    if args.list:
+        summary += """
+    - Big list:
+        . number of elements: {0}
+        . value type: {1}
+""".format(args.size, 'np.ndarray'
+           if args.valuearray else 'str'
+            if args.valuestring else 'int')
+        if args.valuearray:
+            summary += """        . arrays shape: {0}
+""".format(str(tuple(args.valuearrayshape)))
 
     print(summary)
 
@@ -233,7 +262,7 @@ def run(args):
     compress_levels = args.compress
     mmap_mode = args.mmap
 
-    dict_size = args.size
+    container_size = args.size
     a1_shape = tuple(args.shape)
     a2_shape = (10000000, )
 
@@ -314,37 +343,64 @@ def run(args):
     if args.dict:
         # Big dictionnary
         name = '% 5s' % 'Big dict'
-        array_shape = tuple(args.dictarrayshape)
+        array_shape = tuple(args.valuearrayshape)
         for compress in compress_levels:
-            big_dict = generate_rand_dict(dict_size,
-                                          with_arrays=args.dictarray,
-                                          with_string=args.dictstring,
+            big_dict = generate_rand_dict(container_size,
+                                          with_arrays=args.valuearray,
+                                          with_string=args.valuestring,
                                           array_shape=array_shape)
             run_bench(bench_compress, big_dict, name,
                       compress=compress, tries=args.tries)
             del big_dict
         if not args.nommap:
-            big_dict = generate_rand_dict(dict_size,
-                                          with_arrays=args.dictarray,
-                                          with_string=args.dictstring,
+            big_dict = generate_rand_dict(container_size,
+                                          with_arrays=args.valuearray,
+                                          with_string=args.valuestring,
                                           array_shape=array_shape)
             run_bench(bench_mmap, big_dict, name, mmap_mode=mmap_mode,
                       tries=args.tries)
             del big_dict
+
+    if args.list:
+        # Big dictionnary
+        name = '% 5s' % 'Big list'
+        array_shape = tuple(args.valuearrayshape)
+        for compress in compress_levels:
+            big_list = generate_rand_list(container_size,
+                                          with_arrays=args.valuearray,
+                                          with_string=args.valuestring,
+                                          array_shape=array_shape)
+            run_bench(bench_compress, big_list, name,
+                      compress=compress, tries=args.tries)
+            del big_list
+        if not args.nommap:
+            big_list = generate_rand_list(container_size,
+                                          with_arrays=args.valuearray,
+                                          with_string=args.valuestring,
+                                          array_shape=array_shape)
+            run_bench(bench_mmap, big_list, name, mmap_mode=mmap_mode,
+                      tries=args.tries)
+            del big_list
 
     if args.combo:
         # 2 big arrays with one big dict
         name = '% 5s' % 'Dict/arrays'
         for compress in compress_levels:
             obj = [rnd.random_sample(a1_shape),
-                   generate_rand_dict(dict_size),
+                   generate_rand_dict(container_size,
+                                      with_arrays=args.valuearray,
+                                      with_string=args.valuestring,
+                                      array_shape=array_shape),
                    rnd.random_sample(a2_shape)]
             run_bench(bench_compress, obj, name, compress=compress,
                       tries=args.tries)
             del obj
         if not args.nommap:
             obj = [rnd.random_sample(a1_shape),
-                   generate_rand_dict(dict_size),
+                   generate_rand_dict(container_size,
+                                      with_arrays=args.valuearray,
+                                      with_string=args.valuestring,
+                                      array_shape=array_shape),
                    rnd.random_sample(a2_shape)]
             run_bench(bench_mmap, obj, name,
                       mmap_mode=mmap_mode,
@@ -368,15 +424,13 @@ if __name__ == "__main__":
                         help="Don't bench memmap")
     parser.add_argument('--size', type=int, default=10000,
                         help="Big dictionnary size.")
-    parser.add_argument('--dictarray', action="store_true",
-                        help="Use a big dictionnary with numpy arrays type as "
-                             "values.")
-    parser.add_argument('--dictarrayshape', nargs='+', type=int,
+    parser.add_argument('--valuearray', action="store_true",
+                        help="Use numpy arrays type in containers (list, dict)")
+    parser.add_argument('--valuearrayshape', nargs='+', type=int,
                         default=(10, 10),
-                        help="Shape of arrays in big dictionary.")
-    parser.add_argument('--dictstring', action="store_true",
-                        help="Use a big dictionnary with string type as "
-                             "values.")
+                        help="Shape of arrays in big containers.")
+    parser.add_argument('--valuestring', action="store_true",
+                        help="Use string type in containers (list, dict).")
     parser.add_argument("-n", "--nifti", action="store_true",
                         help="Benchmark Nifti data")
     parser.add_argument("-a", "--array", action="store_true",
@@ -384,7 +438,9 @@ if __name__ == "__main__":
     parser.add_argument("-A", "--arrays", action="store_true",
                         help="Benchmark list of big numpy arrays")
     parser.add_argument("-d", "--dict", action="store_true",
-                        help="Benchmark big dictionnary")
+                        help="Benchmark big dictionnary.")
+    parser.add_argument("-l", "--list", action="store_true",
+                        help="Benchmark big list.")
     parser.add_argument("-c", "--combo", action="store_true",
                         help="Benchmark big dictionnary + list of "
                              "big numpy arrays.")
