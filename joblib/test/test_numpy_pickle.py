@@ -19,6 +19,8 @@ from joblib.test.common import np, with_numpy, with_memory_usage, memory_used
 from joblib import numpy_pickle
 from joblib.test import data
 
+from joblib.numpy_pickle_utils import _IO_BUFFER_SIZE
+
 ###############################################################################
 # Define a list of standard types.
 # Borrowed from dill, initial author: Micheal McKerns:
@@ -215,10 +217,10 @@ def test_numpy_persistence():
 @with_numpy
 def test_numpy_persistence_big_array_compressed():
     rnd = np.random.RandomState(0)
-    a = rnd.random_sample((5000, 5000))
+    a = rnd.random_sample((100, 100))
     filename = env['filename'] + str(random.randint(0, 1000))
-    numpy_pickle.dump(a, filename, compress=True)
-    a_reloaded = numpy_pickle.load(filename)
+    numpy_pickle.dump(a, filename, compress=True, buffer_size=10)
+    a_reloaded = numpy_pickle.load(filename, buffer_size=10)
 
     np.testing.assert_array_equal(a, a_reloaded)
 
@@ -267,7 +269,7 @@ def test_memmap_persistence():
                                   obj_loaded.array_int)
 
     # Test w+ mode is caught and the mode has switched to r+
-    obj_mode_w = numpy_pickle.load(filename, mmap_mode='w+')
+    numpy_pickle.load(filename, mmap_mode='w+')
     nose.tools.assert_true(obj_loaded.array_int.flags.writeable)
     nose.tools.assert_equal(obj_loaded.array_int.mode, 'r+')
     nose.tools.assert_true(obj_loaded.array_float.flags.writeable)
@@ -357,7 +359,7 @@ def test_memory_usage():
     """Verify memory stays within expected bounds."""
     filename = env['filename']
     small_array = np.ones((10, 10))
-    big_array = np.ones((5000, 5000))
+    big_array = np.ones(shape=30 * int(1e6), dtype=np.uint8)
     small_matrix = np.matrix(small_array)
     big_matrix = np.matrix(big_array)
     for compress in (True, False):
@@ -369,13 +371,13 @@ def test_memory_usage():
 
             # The memory used to dump the object shouldn't exceed the buffer
             # size used to write array chunks (16MB).
-            write_buf_size = 16 * 1024 ** 2 / 1e6
+            write_buf_size = _IO_BUFFER_SIZE + 16 * 1024 ** 2 / 1e6
             nose.tools.assert_true(mem_used <= write_buf_size)
 
             mem_used = memory_used(numpy_pickle.load, obj_filename)
             # memory used should be less than array size + buffer size used to
             # read the array chunk by chunk.
-            read_buf_size = 32  # MiB
+            read_buf_size = 32 + _IO_BUFFER_SIZE  # MiB
             nose.tools.assert_true(mem_used < size + read_buf_size)
 
 

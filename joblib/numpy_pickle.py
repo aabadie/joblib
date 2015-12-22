@@ -12,12 +12,10 @@ import io
 
 from contextlib import closing
 
-from .numpy_pickle_utils import PY3
+from .numpy_pickle_utils import PY3, PY26
 from .numpy_pickle_utils import _ZFILE_PREFIX
 from .numpy_pickle_utils import Unpickler, Pickler
-from .numpy_pickle_utils import GzipFileWithoutCRC
-from .numpy_pickle_utils import _read_magic, _check_filetype
-from .numpy_pickle_utils import _check_buffering, _use_buffered_mode
+from .numpy_pickle_utils import _read_magic, _check_filetype, _IO_BUFFER_SIZE
 from .numpy_pickle_utils import _read_bytes, BUFFER_SIZE
 from .numpy_pickle_compat import load_compatibility
 from .numpy_pickle_compat import NDArrayWrapper, ZNDArrayWrapper
@@ -79,28 +77,14 @@ class NumpyArrayWrapper(object):
             # directly. Instead, we will pickle it out with version 2 of the
             # pickle protocol.
             pickle.dump(array, pickler.file_handle, protocol=2)
-        elif self.order == 'F':
-            if pickler.np.compat.isfileobj(pickler.file_handle):
-                array.T.tofile(pickler.file_handle)
-            else:
-                for chunk in pickler.np.nditer(array,
-                                               flags=['external_loop',
-                                                      'buffered',
-                                                      'zerosize_ok'],
-                                               buffersize=buffersize,
-                                               order='F'):
-                    pickler.file_handle.write(chunk.tostring('C'))
         else:
-            if pickler.np.compat.isfileobj(pickler.file_handle):
-                array.tofile(pickler.file_handle)
-            else:
-                for chunk in pickler.np.nditer(array,
-                                               flags=['external_loop',
-                                                      'buffered',
-                                                      'zerosize_ok'],
-                                               buffersize=buffersize,
-                                               order='C'):
-                    pickler.file_handle.write(chunk.tostring('C'))
+            for chunk in pickler.np.nditer(array,
+                                           flags=['external_loop',
+                                                  'buffered',
+                                                  'zerosize_ok'],
+                                           buffersize=buffersize,
+                                           order=self.order):
+                pickler.file_handle.write(chunk.tostring('C'))
 
     def read_array(self, unpickler):
         """Read array from unpickler file handle.
@@ -117,7 +101,8 @@ class NumpyArrayWrapper(object):
             # The array contained Python objects. We need to unpickle the data.
             array = pickle.load(unpickler.file_handle)
         else:
-            if unpickler.np.compat.isfileobj(unpickler.file_handle):
+            if PY26 and unpickler.np.compat.isfileobj(unpickler.file_handle):
+                # In python 26, gzip.GzipFile is considered as a file.
                 # For file objects, use np.fromfile function.
                 # This function is fast than the memory-intensive method below.
                 array = unpickler.np.fromfile(unpickler.file_handle,
@@ -347,7 +332,8 @@ class NumpyUnpickler(Unpickler):
 ###############################################################################
 # Utility functions
 
-def dump(value, filename, compress=0, protocol=None, cache_size=None):
+def dump(value, filename, compress=0, protocol=None,
+         buffer_size=_IO_BUFFER_SIZE, cache_size=None):
     """Persist an arbitrary Python object.
 
     Fast persistence of an arbitrary Python object into one file with
@@ -367,6 +353,8 @@ def dump(value, filename, compress=0, protocol=None, cache_size=None):
         If compress is True, the compression level used is 3.
     protocol: positive int
         Pickle protocol, see pickle.dump documentation for more details.
+    buffer_size: positive int
+        Size of the buffer used to write the filename. Default is 10MiB.
     cache_size: positive int, optional
         This option is deprecated in 0.10 and has no effect.
 
@@ -407,33 +395,26 @@ def dump(value, filename, compress=0, protocol=None, cache_size=None):
                       "You used 'cache_size={0}'".format(cache_size),
                       DeprecationWarning, stacklevel=2)
 
-    try:
-        fp = open(filename, 'wb', buffering=_check_buffering(filename))
-        if compress != 0:
-            if _use_buffered_mode(value):
-                # dump the full content in a memory buffer
-                buf = io.BytesIO()
-                pickler = NumpyPickler(buf, protocol=protocol)
+    if compress != 0:
+        if PY26:
+            with closing(gzip.GzipFile(filename, mode='wb',
+                                       compresslevel=compress)) as f:
+                pickler = NumpyPickler(f, protocol=protocol)
                 pickler.dump(value)
-                with closing(GzipFileWithoutCRC(fileobj=fp, mode='wb',
-                                                compresslevel=compress)) as cfp:
-                    cfp.write(buf.getvalue())
-            else:
-                with closing(GzipFileWithoutCRC(fileobj=fp, mode='wb',
-                                                compresslevel=compress)) as cfp:
-                    pickler = NumpyPickler(cfp, protocol=protocol)
-                    pickler.dump(value)
         else:
-            pickler = NumpyPickler(fp, protocol=protocol)
+            with io.BufferedWriter(gzip.GzipFile(filename, mode='wb',
+                                                 compresslevel=compress),
+                                   buffer_size=_IO_BUFFER_SIZE) as f:
+                pickler = NumpyPickler(f, protocol=protocol)
+                pickler.dump(value)
+    else:
+        with open(filename, 'wb') as f:
+            pickler = NumpyPickler(f, protocol=protocol)
             pickler.dump(value)
-    finally:
-        if 'pickler' in locals() and hasattr(pickler, 'file_handle'):
-            fp.flush()
-            fp.close()
     return [filename]
 
 
-def load(filename, mmap_mode=None):
+def load(filename, mmap_mode=None, buffer_size=_IO_BUFFER_SIZE):
     """Reconstruct a Python object from a file persisted with joblib.dump.
 
     Parameters
@@ -445,6 +426,8 @@ def load(filename, mmap_mode=None):
         mode has no effect for compressed files. Note that in this
         case the reconstructed object might not longer match exactly
         the originally pickled object.
+    buffer_size: positive int
+        Size of the buffer used to read the filename. Default is 10MiB.
 
     Returns
     -------
@@ -475,8 +458,10 @@ def load(filename, mmap_mode=None):
                       DeprecationWarning, stacklevel=2)
         return load_compatibility(filename)
 
-    with closing(_check_filetype(filename, magic)) as file_handle:
-        if isinstance(file_handle, gzip.GzipFile) and mmap_mode is not None:
+    with closing(_check_filetype(filename, magic,
+                                 buffer_size=buffer_size)) as f:
+        if (isinstance(f, (gzip.GzipFile, io.BufferedReader)) and
+                mmap_mode is not None):
             warnings.warn('File "%(filename)s" appears to be compressed, '
                           'this is not compatible with mmap_mode '
                           '"%(mmap_mode)s" flag passed' % locals(),
@@ -487,9 +472,7 @@ def load(filename, mmap_mode=None):
         # That said, if data are stored in companion files, which can be the
         # case with the old persistence format, moving the directory will
         # create a race when joblib tries to access the companion files.
-        unpickler = NumpyUnpickler(filename,
-                                   file_handle,
-                                   mmap_mode=mmap_mode)
+        unpickler = NumpyUnpickler(filename, f, mmap_mode=mmap_mode)
         try:
             obj = unpickler.load()
             if unpickler.compat_mode:

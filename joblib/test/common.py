@@ -38,7 +38,7 @@ try:
     def memory_used(func, *args, **kwargs):
         """Compute memory usage when executing func."""
         gc.collect()
-        ref_mem = memory_usage(-1, interval=.001, timeout=1, max_usage=True)
+        ref_mem = memory_usage(max_usage=True)
         mem_use = memory_usage((func, args, kwargs),
                                interval=.001, timeout=1, max_usage=True)
         return mem_use[0] - ref_mem

@@ -9,9 +9,10 @@ import sys
 import io
 import gzip
 import os
+import struct
 
 PY3 = sys.version_info[0] >= 3
-PY26 = sys.version_info[0] == 2 and sys.version_info[1] == 6
+PY26 = sys.version_info[:2] == (2, 6)
 
 if PY3:
     Unpickler = pickle._Unpickler
@@ -45,108 +46,12 @@ except ImportError:
 _ZFILE_PREFIX = asbytes('ZF')
 _GZIP_PREFIX = b'\x1f\x8b'
 
-
-class GzipFileWithoutCRC(gzip.GzipFile):
-    """Subclass of gzip.GzipFile with CRC checks disabled.
-
-    This version is here for performance reason as CRC computation increases
-    significantly the read/write time of compressed files.
-    """
-
-    def _init_write(self, filename):
-        self.name = filename
-        self.crc = 0xffffffff
-        self.size = 0
-        self.writebuf = []
-        self.bufsize = 0
-
-    def write(self, data):
-        try:
-            # works with Python < 3.5
-            self._check_closed()
-        except AttributeError:
-            pass
-        if self.mode != gzip.WRITE:
-            import errno
-            raise OSError(errno.EBADF,
-                          "write() on read-only GzipFile object")
-        if self.fileobj is None:
-            raise ValueError("write() on closed GzipFile object")
-        # Convert data type if called by io.BufferedWriter.
-        if not PY26 and isinstance(data, memoryview):
-            data = data.tobytes()
-        if len(data) > 0:
-            self.size = self.size + len(data)
-            self.crc = 0xffffffff
-            self.fileobj.write(self.compress.compress(data))
-            try:
-                # works with Python < 3.5
-                self.offset += len(data)
-            except AttributeError:
-                pass
-        return len(data)
-
-    def _read_eof(self):
-        pass
-
-    def _init_read(self):
-        self.crc = 0xffffffff
-        self.size = 0
-
-    def _add_read_data(self, data):
-        self.crc = 0xffffffff
-        if not PY26:
-            offset = self.offset - self.extrastart
-            self.extrabuf = self.extrabuf[offset:] + data
-            self.extrasize = self.extrasize + len(data)
-            self.extrastart = self.offset
-        else:
-            self.extrabuf = self.extrabuf + data
-            self.extrasize = self.extrasize + len(data)
-        self.size = self.size + len(data)
+# Buffer size used in io.BufferedReader and io.BufferedWriter
+_IO_BUFFER_SIZE = 10 * 1024 ** 2
 
 
 ###############################################################################
 # Cache file utilities
-
-def _check_buffering(filename):
-    """Return the best buffering size to read/write filename."""
-    if sys.platform != 'linux':
-        return -1
-
-    statvfs = os.statvfs(os.path.dirname(filename))
-    return statvfs.f_bsize
-
-
-def _object_size(obj):
-    """Compute the size of an object in memory."""
-    if np is None:
-        return sys.getsizeof(obj)
-
-    if isinstance(obj, np.ndarray):
-        return obj.nbytes
-
-    obj_size = 0
-    if isinstance(obj, dict):
-        for k, v in obj.items():
-            if isinstance(v, np.ndarray):
-                obj_size += v.nbytes
-            elif isinstance(v, (dict, list, tuple)):
-                obj_size += _object_size(v)
-
-    if isinstance(obj, (tuple, list)):
-        for v in obj:
-            if isinstance(v, np.ndarray):
-                obj_size += v.nbytes
-            elif isinstance(v, (dict, list, tuple)):
-                obj_size += _object_size(v)
-
-    return obj_size
-
-
-def _use_buffered_mode(value):
-    obj_size = _object_size(value) / 1024 ** 2
-    return obj_size < 64
 
 
 def _read_magic(file_handle):
@@ -166,7 +71,7 @@ def _read_magic(file_handle):
     return magic
 
 
-def _check_filetype(filename, magic):
+def _check_filetype(filename, magic, buffer_size=_IO_BUFFER_SIZE):
     """Utility function opening the right fileobject from a filename.
 
     The magic number is used to choose between the type of file object to open:
@@ -185,21 +90,14 @@ def _check_filetype(filename, magic):
         a file like object
 
     """
-    fp = open(filename, 'rb', buffering=_check_buffering(filename))
     if magic == _GZIP_PREFIX:
-        fobj = fp
-        if os.stat(filename).st_size / 1024 ** 2 < 64:
-            # Use buffered version with small files
-            # we allow memory copies in this case
-            buf = io.BytesIO()
-            buf.write(fp.read())
-            fp.close()
-            buf.seek(0)
-            fobj = buf
+        if PY26:
+            return gzip.GzipFile(filename, 'rb')
+        else:
+            return io.BufferedReader(gzip.GzipFile(filename),
+                                     buffer_size=buffer_size)
 
-        return GzipFileWithoutCRC(fileobj=fobj)
-
-    return fp
+    return open(filename, 'rb')
 
 
 # Utility functions/variables from numpy required for writing arrays.
