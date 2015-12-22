@@ -90,13 +90,21 @@ def timeit(func, *args, **kwargs):
     return np.mean(times[1:-1]) if tries > 1 else t1 - t0, out
 
 
-def generate_rand_dict(size):
+def generate_rand_dict(size,
+                       with_arrays=False,
+                       with_string=False,
+                       array_shape=(10, 10)):
     """Generate dictionnary with random values from list of keys."""
     ret = {}
     rnd = np.random.RandomState(0)
     randoms = rnd.random_sample((size))
     for key, random in zip(range(size), randoms):
-        ret[str(key)] = random
+        if with_arrays:
+            ret[str(key)] = rnd.random_sample(array_shape)
+        elif with_string:
+            ret[str(key)] = str(random)
+        else:
+            ret[str(key)] = int(random)
     return ret
 
 
@@ -147,7 +155,13 @@ def print_bench_summary(args):
         summary += """
     - Big dictionnary:
         . number of keys: {0}
-""".format(args.size)
+        . value type: {1}
+""".format(args.size, 'np.ndarray'
+           if args.dictarray else 'str'
+            if args.dictstring else 'int')
+        if args.dictarray:
+            summary += """        . arrays shape: {0}
+""".format(str(tuple(args.dictarrayshape)))
 
     print(summary)
 
@@ -161,14 +175,14 @@ def bench_compress(dataset, name='',
     mem_read = list()
     mem_write = list()
     clear_out()
-    time_write, _ = timeit(joblib.dump, dataset, 'out/test.pkl',
-                           tries=tries,
-                           compress=compress, cache_size=cache_size)
+    time_write, obj = timeit(joblib.dump, dataset, 'out/test.pkl',
+                             tries=tries,
+                             compress=compress, cache_size=cache_size)
+    del obj
+    gc.collect()
     mem_write = memory_used(joblib.dump, dataset, 'out/test.pkl',
                             compress=compress, cache_size=cache_size)
-
     delete_obj(dataset)
-
     du = disk_used('out')/1024.
     time_read, obj = timeit(joblib.load, 'out/test.pkl', tries=tries)
     delete_obj(obj)
@@ -208,7 +222,8 @@ def run_bench(func, obj, name, **kwargs):
 
 def run(args):
     """Run the full bench suite."""
-    print_bench_summary(args)
+    if args.summary:
+        print_bench_summary(args)
 
     if (not args.nifti and not args.array and not args.arrays and
             not args.dict and not args.combo):
@@ -256,14 +271,14 @@ def run(args):
                         run_bench(bench_compress, d, name_d,
                                   compress=compress, tries=args.tries)
                         del d
+                    if not args.nommap:
+                        d = load_nii(nifti_file)
+                        if c_order:
+                            d = (np.ascontiguousarray(d[0]), d[1])
 
-                    d = load_nii(nifti_file)
-                    if c_order:
-                        d = (np.ascontiguousarray(d[0]), d[1])
-
-                    run_bench(bench_mmap, d, name_d,
-                              mmap_mode=mmap_mode, tries=args.tries)
-                    del d
+                        run_bench(bench_mmap, d, name_d,
+                                  mmap_mode=mmap_mode, tries=args.tries)
+                        del d
 
     # Generate random seed
     rnd = np.random.RandomState(0)
@@ -276,10 +291,11 @@ def run(args):
             run_bench(bench_compress, a1, name,
                       compress=compress, tries=args.tries)
             del a1
-
-        a1 = rnd.random_sample(a1_shape)
-        run_bench(bench_mmap, a1, name, mmap_mode=mmap_mode, tries=args.tries)
-        del a1
+        if not args.nommap:
+            a1 = rnd.random_sample(a1_shape)
+            run_bench(bench_mmap, a1, name, mmap_mode=mmap_mode,
+                      tries=args.tries)
+            del a1
 
     if args.arrays:
         # Complex object with 2 big arrays
@@ -289,23 +305,32 @@ def run(args):
             run_bench(bench_compress, obj, name, compress=compress,
                       tries=args.tries)
             del obj
-
-        obj = [rnd.random_sample(a1_shape), rnd.random_sample(a2_shape)]
-        run_bench(bench_mmap, obj, name, mmap_mode=mmap_mode, tries=args.tries)
-        del obj
+        if not args.nommap:
+            obj = [rnd.random_sample(a1_shape), rnd.random_sample(a2_shape)]
+            run_bench(bench_mmap, obj, name, mmap_mode=mmap_mode,
+                      tries=args.tries)
+            del obj
 
     if args.dict:
         # Big dictionnary
         name = '% 5s' % 'Big dict'
+        array_shape = tuple(args.dictarrayshape)
         for compress in compress_levels:
-            big_dict = generate_rand_dict(dict_size)
+            big_dict = generate_rand_dict(dict_size,
+                                          with_arrays=args.dictarray,
+                                          with_string=args.dictstring,
+                                          array_shape=array_shape)
             run_bench(bench_compress, big_dict, name,
                       compress=compress, tries=args.tries)
             del big_dict
-        big_dict = generate_rand_dict(dict_size)
-        run_bench(bench_mmap, big_dict, name, mmap_mode=mmap_mode,
-                  tries=args.tries)
-        del big_dict
+        if not args.nommap:
+            big_dict = generate_rand_dict(dict_size,
+                                          with_arrays=args.dictarray,
+                                          with_string=args.dictstring,
+                                          array_shape=array_shape)
+            run_bench(bench_mmap, big_dict, name, mmap_mode=mmap_mode,
+                      tries=args.tries)
+            del big_dict
 
     if args.combo:
         # 2 big arrays with one big dict
@@ -317,12 +342,14 @@ def run(args):
             run_bench(bench_compress, obj, name, compress=compress,
                       tries=args.tries)
             del obj
-
-        obj = [rnd.random_sample(a1_shape),
-               generate_rand_dict(dict_size),
-               rnd.random_sample(a2_shape)]
-        run_bench(bench_mmap, obj, name, mmap_mode=mmap_mode, tries=args.tries)
-        del obj
+        if not args.nommap:
+            obj = [rnd.random_sample(a1_shape),
+                   generate_rand_dict(dict_size),
+                   rnd.random_sample(a2_shape)]
+            run_bench(bench_mmap, obj, name,
+                      mmap_mode=mmap_mode,
+                      tries=args.tries)
+            del obj
 
 if __name__ == "__main__":
     import argparse
@@ -337,8 +364,19 @@ if __name__ == "__main__":
                              "mean on.")
     parser.add_argument('--shape', nargs='+', type=int, default=(10000, 10000),
                         help="Big array shape.")
+    parser.add_argument("-m", "--nommap", action="store_true",
+                        help="Don't bench memmap")
     parser.add_argument('--size', type=int, default=10000,
                         help="Big dictionnary size.")
+    parser.add_argument('--dictarray', action="store_true",
+                        help="Use a big dictionnary with numpy arrays type as "
+                             "values.")
+    parser.add_argument('--dictarrayshape', nargs='+', type=int,
+                        default=(10, 10),
+                        help="Shape of arrays in big dictionary.")
+    parser.add_argument('--dictstring', action="store_true",
+                        help="Use a big dictionnary with string type as "
+                             "values.")
     parser.add_argument("-n", "--nifti", action="store_true",
                         help="Benchmark Nifti data")
     parser.add_argument("-a", "--array", action="store_true",
@@ -350,5 +388,7 @@ if __name__ == "__main__":
     parser.add_argument("-c", "--combo", action="store_true",
                         help="Benchmark big dictionnary + list of "
                              "big numpy arrays.")
+    parser.add_argument("-s", "--summary", action="store_true",
+                        help="Show bench summary.")
 
     run(parser.parse_args())
