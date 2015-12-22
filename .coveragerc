@@ -1,2 +1,3 @@
 [run]
-omit = benchmarks/*
+omit =
+  joblib/test/data/*
