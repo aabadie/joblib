@@ -92,6 +92,7 @@ def _check_filetype(filename, magic, buffer_size=_IO_BUFFER_SIZE):
     """
     if magic == _GZIP_PREFIX:
         if PY26:
+            # Python 2.6 doesn't support io.BufferedReader with GzipFile.
             return gzip.GzipFile(filename, 'rb')
         else:
             return io.BufferedReader(gzip.GzipFile(filename),
