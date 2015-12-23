@@ -9,6 +9,7 @@ import sys
 import re
 import tempfile
 import glob
+import io
 import warnings
 import nose
 
@@ -19,7 +20,7 @@ from joblib.test.common import np, with_numpy, with_memory_usage, memory_used
 from joblib import numpy_pickle
 from joblib.test import data
 
-from joblib.numpy_pickle_utils import _IO_BUFFER_SIZE
+from joblib.numpy_pickle_utils import _IO_BUFFER_SIZE, JoblibZFile, PY3
 
 ###############################################################################
 # Define a list of standard types.
@@ -323,7 +324,7 @@ def test_compress_mmap_mode_warning():
             nose.tools.assert_equal(warn.category, DeprecationWarning)
             nose.tools.assert_equal(warn.message.args[0],
                                     'File "%(filename)s" appears to be '
-                                    'compressed, this is not compatible with '
+                                    'buffered, this is not compatible with '
                                     'mmap_mode "%(mmap_mode)s" flag passed' %
                                     {'filename': this_filename,
                                      'mmap_mode': 'r+'})
@@ -512,6 +513,117 @@ def test_joblib_pickle_across_python_versions():
 
     for fname in data_filenames:
         _check_pickle(fname, expected_list)
+
+
+def _check_compression_format(filename, expected_list):
+    if (sys.version_info[:2] < (3, 3) and filename[-2:] == 'xz'):
+        # lzma is not supported for python versions < 3.3
+        nose.tools.assert_raises(NotImplementedError,
+                                 numpy_pickle.load, filename)
+    else:
+        _check_pickle(filename, expected_list)
+
+
+@with_numpy
+def test_joblib_decompression_format_support():
+    # XXX: temporarily disable this test on non little-endian machines
+    if sys.byteorder != 'little':
+        raise nose.SkipTest('Skipping this test on non little-endian machines')
+
+    # We need to be specific about dtypes in particular endianness
+    # because the pickles can be generated on one architecture and
+    # the tests run on another one. See
+    # https://github.com/joblib/joblib/issues/279.
+    expected_list = [np.arange(5, dtype=np.dtype('<i8')),
+                     np.arange(5, dtype=np.dtype('<f8')),
+                     np.array([1, 'abc', {'a': 1, 'b': 2}], dtype='O'),
+                     # .tostring actually returns bytes and is a
+                     # compatibility alias for .tobytes which was
+                     # added in 1.9.0
+                     np.arange(256, dtype=np.uint8).tostring(),
+                     # np.matrix is a subclass of nd.array, here we want
+                     # to verify this type of object is correctly unpickled
+                     # among versions.
+                     np.matrix([0, 1, 2], dtype=np.dtype('<i8')),
+                     u"C'est l'\xe9t\xe9 !"]
+
+    test_data_dir = os.path.dirname(os.path.abspath(data.__file__))
+
+    compress_filenames = glob.glob(os.path.join(test_data_dir, '*.gz'))
+    compress_filenames = glob.glob(os.path.join(test_data_dir, '*.gzip'))
+    compress_filenames += glob.glob(os.path.join(test_data_dir, '*.bz2'))
+    compress_filenames += glob.glob(os.path.join(test_data_dir, '*.xz'))
+
+    for fname in compress_filenames:
+        _check_compression_format(fname, expected_list)
+
+
+def test_joblib_zfile():
+    filename = env['filename'] + str(random.randint(0, 1000))
+
+    # Test bad compression levels
+    for bad_value in (-1, 10, 15, 'a', (), {}):
+        nose.tools.assert_raises(ValueError,
+                                 JoblibZFile, filename, 'w',
+                                 compresslevel=bad_value)
+
+    # Test invalid modules
+    for bad_mode in ('a', 'x', 1, 2):
+        nose.tools.assert_raises(ValueError,
+                                 JoblibZFile, filename, bad_mode)
+
+    # Test wrong filename type (not a string or a file)
+    for bad_file in (1, (), {}):
+        nose.tools.assert_raises(TypeError,
+                                 JoblibZFile, bad_file, 'r')
+
+    for d in (b'a few data as bytes.',
+              # More bytes
+              10000*"{0}"
+              .format(random.randint(0, 1000) * 1000).encode('latin-1')):
+        # Regular cases
+        for compress_level in (1, 3, 9):
+            with open(filename, 'wb') as f:
+                with JoblibZFile(f, 'wb', compresslevel=compress_level) as fz:
+                    nose.tools.assert_true(fz.writable())
+                    fz.write(d)
+                    nose.tools.assert_equal(fz.fileno(), f.fileno())
+                    nose.tools.assert_raises(io.UnsupportedOperation,
+                                             fz._check_can_read)
+                    nose.tools.assert_raises(io.UnsupportedOperation,
+                                             fz._check_can_seek)
+                nose.tools.assert_true(fz.closed)
+                nose.tools.assert_raises(ValueError,
+                                         fz._check_not_closed)
+
+            with open(filename, 'rb') as f:
+                with JoblibZFile(f) as fz:
+                    nose.tools.assert_true(fz.readable())
+                    if sys.version_info[:1] == 3:
+                        nose.tools.assert_true(fz.seekable())
+                    nose.tools.assert_equal(fz.fileno(), f.fileno())
+                    nose.tools.assert_equal(fz.read(), d)
+                    nose.tools.assert_raises(io.UnsupportedOperation,
+                                             fz._check_can_write)
+                    if PY3:
+                        # io.BufferedIOBase doesn't have seekable() method in
+                        # python 2
+                        nose.tools.assert_true(fz.seekable())
+                        fz.seek(0)
+                        nose.tools.assert_equal(fz.tell(), 0)
+                nose.tools.assert_true(fz.closed)
+
+            os.remove(filename)
+
+            # Test with a filename as input
+            with JoblibZFile(filename, 'wb',
+                             compresslevel=compress_level) as fz:
+                nose.tools.assert_true(fz.writable())
+                fz.write(d)
+
+            with JoblibZFile(filename, 'rb') as fz:
+                nose.tools.assert_equal(fz.read(), d)
+
 
 ################################################################################
 # Test dumping array subclasses

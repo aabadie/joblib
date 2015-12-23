@@ -6,19 +6,21 @@
 
 import pickle
 import os
-import gzip
 import warnings
 import io
-
 from contextlib import closing
 
 from .numpy_pickle_utils import PY3, PY26
 from .numpy_pickle_utils import _ZFILE_PREFIX
+from .numpy_pickle_utils import JoblibZFile
 from .numpy_pickle_utils import Unpickler, Pickler
-from .numpy_pickle_utils import _read_magic, _check_filetype, _IO_BUFFER_SIZE
+from .numpy_pickle_utils import _check_magic, _check_filetype, _IO_BUFFER_SIZE
 from .numpy_pickle_utils import _read_bytes, BUFFER_SIZE
 from .numpy_pickle_compat import load_compatibility
-from .numpy_pickle_compat import NDArrayWrapper, ZNDArrayWrapper
+from .numpy_pickle_compat import NDArrayWrapper
+# For compatibility with old versions of joblib, we need ZNDArrayWrapper
+# to be visible in the current namespace.
+from .numpy_pickle_compat import ZNDArrayWrapper
 from ._compat import _basestring
 
 ###############################################################################
@@ -197,7 +199,7 @@ class NumpyPickler(Pickler):
     The main features of this object are:
     * persistence of numpy arrays in a single file.
 
-    * optional compression using GzipFile, with a special care on avoid
+    * optional compression using JoblibZFile, with a special care on avoiding
     memory copies.
 
     Attributes
@@ -214,7 +216,7 @@ class NumpyPickler(Pickler):
     def __init__(self, fp, protocol=None):
         """Constructor. Store the useful information for later."""
         self.file_handle = fp
-        self.compress = isinstance(self.file_handle, gzip.GzipFile)
+        self.buffered = isinstance(self.file_handle, JoblibZFile)
 
         # By default we want a pickle protocol that only changes with
         # the major python version and not the minor one
@@ -234,7 +236,7 @@ class NumpyPickler(Pickler):
         """Create and returns a numpy array wrapper from a numpy array."""
         order = 'F' if (array.flags.f_contiguous and
                         not array.flags.c_contiguous) else 'C'
-        allow_mmap = not self.compress and not array.dtype.hasobject
+        allow_mmap = not self.buffered and not array.dtype.hasobject
         wrapper = NumpyArrayWrapper(type(array),
                                     array.shape, order, array.dtype,
                                     allow_mmap=allow_mmap)
@@ -295,6 +297,7 @@ class NumpyUnpickler(Unpickler):
 
         self.mmap_mode = mmap_mode
         self.file_handle = file_handle
+        # filename is required for numpy mmap mode.
         self.filename = filename
         self.compat_mode = False
         Unpickler.__init__(self, self.file_handle)
@@ -314,13 +317,15 @@ class NumpyUnpickler(Unpickler):
         """
         Unpickler.load_build(self)
 
-        # For back backward compatibility
+        # For back backward compatibility, we support NDArrayWrapper objects.
         if isinstance(self.stack[-1], (NDArrayWrapper, NumpyArrayWrapper)):
             if self.np is None:
                 raise ImportError("Trying to unpickle an ndarray, "
                                   "but numpy didn't import correctly")
             array_wrapper = self.stack.pop()
-            # If any NDArrayWrapper is found, we switch to compatibility mode.
+            # If any NDArrayWrapper is found, we switch to compatibility mode,
+            # this will be used to raise a DeprecationWarning to the user at
+            # the end of the unpickling.
             self.compat_mode |= isinstance(array_wrapper, NDArrayWrapper)
             self.stack.append(array_wrapper.read(self))
 
@@ -399,13 +404,15 @@ def dump(value, filename, compress=0, protocol=None,
 
     if compress != 0:
         if PY26:
-            with closing(gzip.GzipFile(filename, mode='wb',
-                                       compresslevel=compress)) as f:
+            # Python 2.6 doesn't support passing JoblibZFile
+            # through a BufferedWriter, we use a direct call.
+            with closing(JoblibZFile(filename, mode='wb',
+                                     compresslevel=compress)) as f:
                 pickler = NumpyPickler(f, protocol=protocol)
                 pickler.dump(value)
         else:
-            with io.BufferedWriter(gzip.GzipFile(filename, mode='wb',
-                                                 compresslevel=compress),
+            with io.BufferedWriter(JoblibZFile(filename, mode='wb',
+                                               compresslevel=compress),
                                    buffer_size=_IO_BUFFER_SIZE) as f:
                 pickler = NumpyPickler(f, protocol=protocol)
                 pickler.dump(value)
@@ -449,22 +456,18 @@ def load(filename, mmap_mode=None, buffer_size=_IO_BUFFER_SIZE):
     object might not match the original pickled object. Note that if the
     file was saved with compression, the arrays cannot be memmaped.
     """
-    with open(filename, 'rb') as file_handle:
-        magic = _read_magic(file_handle)
-
     # Backward compatibility with old compression strategy
-    if magic == _ZFILE_PREFIX:
+    if _check_magic(filename, _ZFILE_PREFIX):
         warnings.warn("The file '%s' has been generated with a joblib version "
                       "less than 0.10. "
                       "Please regenerate this pickle file." % filename,
                       DeprecationWarning, stacklevel=2)
         return load_compatibility(filename)
 
-    with closing(_check_filetype(filename, magic,
-                                 buffer_size=buffer_size)) as f:
-        if (isinstance(f, (gzip.GzipFile, io.BufferedReader)) and
+    with closing(_check_filetype(filename, buffer_size=buffer_size)) as f:
+        if (isinstance(f, (JoblibZFile, io.BufferedIOBase)) and
                 mmap_mode is not None):
-            warnings.warn('File "%(filename)s" appears to be compressed, '
+            warnings.warn('File "%(filename)s" appears to be buffered, '
                           'this is not compatible with mmap_mode '
                           '"%(mmap_mode)s" flag passed' % locals(),
                           DeprecationWarning, stacklevel=2)
