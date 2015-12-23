@@ -101,10 +101,12 @@ class NumpyArrayWrapper(object):
             # The array contained Python objects. We need to unpickle the data.
             array = pickle.load(unpickler.file_handle)
         else:
-            if PY26 and unpickler.np.compat.isfileobj(unpickler.file_handle):
-                # In python 26, gzip.GzipFile is considered as a file.
+            if not PY3 and unpickler.np.compat.isfileobj(unpickler.file_handle):
+                # In python 2, gzip.GzipFile is considered as a file so one
+                # can use numpy.fromfile().
                 # For file objects, use np.fromfile function.
-                # This function is fast than the memory-intensive method below.
+                # This function is faster than the memory-intensive
+                # method below.
                 array = unpickler.np.fromfile(unpickler.file_handle,
                                               dtype=self.dtype, count=count)
             else:
