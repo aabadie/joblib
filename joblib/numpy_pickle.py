@@ -336,6 +336,12 @@ class NumpyUnpickler(Unpickler):
         dispatch[pickle.BUILD] = load_build
 
 
+def _dump(value, f, protocol):
+    """Helper function that wraps the call to joblib internal pickler."""
+    pickler = NumpyPickler(f, protocol=protocol)
+    pickler.dump(value)
+
+
 ###############################################################################
 # Utility functions
 
@@ -408,18 +414,16 @@ def dump(value, filename, compress=0, protocol=None,
             # through a BufferedWriter, we use a direct call.
             with closing(JoblibZFile(filename, mode='wb',
                                      compresslevel=compress)) as f:
-                pickler = NumpyPickler(f, protocol=protocol)
-                pickler.dump(value)
+                _dump(value, f, protocol)
         else:
             with io.BufferedWriter(JoblibZFile(filename, mode='wb',
                                                compresslevel=compress),
                                    buffer_size=_IO_BUFFER_SIZE) as f:
-                pickler = NumpyPickler(f, protocol=protocol)
-                pickler.dump(value)
+                _dump(value, f, protocol)
     else:
         with open(filename, 'wb') as f:
-            pickler = NumpyPickler(f, protocol=protocol)
-            pickler.dump(value)
+            _dump(value, f, protocol)
+
     return [filename]
 
 
