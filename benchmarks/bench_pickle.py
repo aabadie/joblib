@@ -38,7 +38,7 @@ def kill_disk_cache():
                 raise e
     else:
         # Write ~100M to the disk
-        open('tmp', 'w').write(np.random.random(2e7))
+        open('tmp', 'wb').write(np.random.random(2e7))
 
 
 def delete_obj(obj):
