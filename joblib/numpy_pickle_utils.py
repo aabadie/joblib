@@ -182,9 +182,16 @@ class JoblibZFile(io.BufferedIOBase):
         self._mode = _MODE_CLOSED
         self._pos = 0
         self._size = -1
+        self.compresslevel = compresslevel
 
         if not isinstance(compresslevel, int) or not (1 <= compresslevel <= 9):
             raise ValueError("compresslevel must be between 1 and 9")
+
+        try:
+            import blosc
+        except ImportError:
+            blosc = None
+        self.blosc = blosc
 
         if mode in ("", "r", "rb"):
             mode = "rb"
@@ -307,22 +314,15 @@ class JoblibZFile(io.BufferedIOBase):
                 if not rawblock:
                     raise EOFError
             except EOFError:
-                if not rawblock:
-                    # End-of-stream marker and end of file. We're good.
-                    self._mode = _MODE_READ_EOF
-                    self._size = self._pos
-                    return False
-                # Continue to next stream.
-                self._decompressor = zlib.decompressobj(wbits=-zlib.MAX_WBITS)
-                try:
-                    self._buffer = self._decompressor.decompress(rawblock)
-                except OSError:
-                    # Trailing data isn't a valid zlib stream. We're done here.
-                    self._mode = _MODE_READ_EOF
-                    self._size = self._pos
-                    return False
+                # End-of-stream marker and end of file. We're good.
+                self._mode = _MODE_READ_EOF
+                self._size = self._pos
+                return False
             else:
-                self._buffer = self._decompressor.decompress(rawblock)
+                if self.blosc is None:
+                    self._buffer = self._decompressor.decompress(rawblock)
+                else:
+                    self._buffer = self.blosc.decompress(rawblock)
             self._buffer_offset = 0
         return True
 
@@ -420,7 +420,13 @@ class JoblibZFile(io.BufferedIOBase):
             if not PY26 and isinstance(data, memoryview):
                 data = data.tobytes()
 
-            compressed = self._compressor.compress(data)
+            if self.blosc is None:
+                compressed = self._compressor.compress(data)
+            else:
+                compressed = self.blosc.compress(data, typesize=8,
+                                                 clevel=self.compresslevel,
+                                                 shuffle=False,
+                                                 cname='zlib')
             self._fp.write(compressed)
             self._pos += len(data)
             return len(data)
