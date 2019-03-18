@@ -24,10 +24,10 @@ if [[ "$SKLEARN_TESTS" == "true" ]]; then
     # and run the scikit-learn tests with pytest. The versions of scikit-learn
     # and scipy are frozen to avoid instabilities in the API (see issue #684)
     # that should not be tested here.
-    conda install --yes scikit-learn==0.19.1 nose scipy==1.0.1
+    conda install --yes scikit-learn==0.20.3 nose scipy==1.1.0
     export SKLEARN=`python -c "import sklearn; print(sklearn.__path__[0])"`
     cp $TRAVIS_BUILD_DIR/continuous_integration/travis/copy_joblib.sh $SKLEARN/externals
     (cd $SKLEARN/externals && bash copy_joblib.sh $TRAVIS_BUILD_DIR)
-    cp $TRAVIS_BUILD_DIR/continuous_integration/travis/conftest.py $SKLEARN/..
-    pytest -vl --ignore $SKLEARN/externals --pyargs sklearn
+    # cp $TRAVIS_BUILD_DIR/continuous_integration/travis/conftest.py $SKLEARN/..
+    pytest -l --ignore $SKLEARN/externals --pyargs sklearn
 fi
